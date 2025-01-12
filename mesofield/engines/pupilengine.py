@@ -12,6 +12,7 @@ class PupilEngine(MDAEngine):
         self._config = None
         self._encoder: SerialWorker = None
         self._wheel_data = None
+        # TODO: add triggerable parameter
         
     def set_config(self, cfg) -> None:
         self._config = cfg

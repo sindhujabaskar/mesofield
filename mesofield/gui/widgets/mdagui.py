@@ -104,19 +104,28 @@ class MDA(QWidget):
 
         if len(self.mmcores) == 1:
             '''Single Core Layout'''
+            
+            core_layout = QGroupBox("Live Viewer")
+            core_layout.setLayout(QVBoxLayout())
 
-            self.mmc = self.mmcores[0]
+            self.mmc: CMMCorePlus = self.mmcores[0]
             self.preview = ImagePreview(mmcore=self.mmc, parent=self.mda)
             self.snap_button = SnapButton(mmcore=self.mmc)
             self.live_button = LiveButton(mmcore=self.mmc)
             self.exposure = ExposureWidget(mmcore=self.mmc)
 
+            viewer_layout = QVBoxLayout()
+            buttons = QGroupBox(f"{self.mmc.getDeviceName('Camera')}")
+            buttons.setLayout(QHBoxLayout())
             buttons.layout().addWidget(self.snap_button)
             buttons.layout().addWidget(self.live_button)
-            live_viewer.layout().addWidget(self.preview)
+            viewer_layout.addWidget(buttons)
+            viewer_layout.addWidget(self.preview)
+            
+            core_layout.layout().addLayout(viewer_layout)
 
             self.layout().addWidget(self.mda)
-            self.layout().addWidget(live_viewer)
+            self.layout().addWidget(core_layout)
 
         elif len(self.mmcores) == 2:
             '''Dual Core Layout'''
@@ -135,7 +144,7 @@ class MDA(QWidget):
             #-------------------- Core 1 Viewer ---------------------#
             core1_layout = QVBoxLayout()
 
-            buttons1 = QGroupBox("Core 1")
+            buttons1 = QGroupBox(f"{self.mmcores[0].getDeviceName('Camera')}")
             buttons1.setLayout(QHBoxLayout())
             buttons1.layout().addWidget(snap_button1)
             buttons1.layout().addWidget(live_button1)
@@ -145,7 +154,7 @@ class MDA(QWidget):
             #-------------------- Core 2 Viewer ---------------------#
             core2_layout = QVBoxLayout()
 
-            buttons2 = QGroupBox("Core 2")
+            buttons2 = QGroupBox(f"{self.mmcores[1].getDeviceName('Camera')}")
             buttons2.setLayout(QHBoxLayout())
             buttons2.layout().addWidget(snap_button2)
             buttons2.layout().addWidget(live_button2)
