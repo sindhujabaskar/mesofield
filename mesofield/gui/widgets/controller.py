@@ -81,8 +81,13 @@ class ConfigController(QWidget):
     
     def __init__(self, cfg):
         super().__init__()
-        self._mmc1: CMMCorePlus = cfg._cores[0]
-        self._mmc2: CMMCorePlus = cfg._cores[1]
+        self.mmcores: tuple[CMMCorePlus, CMMCorePlus] = cfg._cores
+        # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
+        if len(self.mmcores) == 2:
+            self._mmc1: CMMCorePlus = cfg._cores[0]
+            self._mmc2: CMMCorePlus = cfg._cores[1]
+        else:
+            self._mmc2: CMMCorePlus = cfg._cores[0]
         self.config: ExperimentConfig = cfg
         self.psychopy_process = None
 
@@ -205,6 +210,8 @@ class ConfigController(QWidget):
         from mesofield.io import CustomWriter
         import threading
 
+        # TODO: Add a check for the MDA sequence and pupil sequence
+        # TODO: add a triggerable parameter
         thread1 = threading.Thread(target=self._mmc1.run_mda, args=(self.config.meso_sequence,), kwargs={'output': CustomWriter(self.config.meso_file_path)})
         thread2 = threading.Thread(target=self._mmc2.run_mda, args=(self.config.pupil_sequence,), kwargs={'output': CustomWriter(self.config.pupil_file_path)})
 
