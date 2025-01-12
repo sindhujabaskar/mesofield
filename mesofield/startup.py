@@ -1,258 +1,256 @@
-import useq
-import logging
+"""
+startup.py
 
+Example refactoring of a startup script using YAML for configuration.
+Preserves:
+- Per-camera instantiation of CMMCorePlus
+- Camera-Engine pairing
+- Accessible hardware references
+- Friendly __repr__ for debugging
+- Extensible for new hardware types (e.g., NI-DAQ)
 
-from dataclasses import dataclass, field
-from typing import Optional, Dict, List
-import json
+Requires:
+  - pyyaml (pip install pyyaml)
+  - pymmcore-plus (pip install pymmcore-plus)
+  
+  {self.__class__.__module__}.{self.__class__.__name__}
+"""
 
+import serial
+import yaml
+from pathlib import Path
+from IPython import embed
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus.mda import MDAEngine
 
 from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.encoder import SerialWorker
 
-# Disable pymmcore-plus logger
-package_logger = logging.getLogger('pymmcore-plus')
+class ParameterManager:
+    """
+    Loads and stores parameters from a YAML configuration file.
+    Provides easy access to camera/encoder configs.
+    """
 
-# Set the logging level to CRITICAL to suppress lower-level logs
-package_logger.setLevel(logging.CRITICAL)
+    def __init__(self, config_file_path: str):
+        self.config_file_path = Path(config_file_path)
+        self.params = {}
+        self._load_params()
 
-@dataclass
+    def _load_params(self):
+        if not self.config_file_path.exists():
+            raise FileNotFoundError(f"Cannot find config file at: {self.config_file_path}")
+
+        with open(self.config_file_path, "r", encoding="utf-8") as file:
+            self.params = yaml.safe_load(file) or {}
+
+    def get_param(self, key, default=None):
+        return self.params.get(key, default)
+
+    def get_cameras(self):
+        return self.params.get("cameras", [])
+
+    def get_encoder_config(self):
+        return self.params.get("encoder", {})
+
+    def __repr__(self):
+        return (
+            f"<ParameterManager config_file_path='{self.config_file_path}' "
+            f"loaded_keys={list(self.params.keys())}>"
+        ) 
+
+class Camera:
+    """
+    Represents one camera device plus an associated Engine.
+    Each Camera holds its own CMMCorePlus instance.
+    """
+
+    def __init__(self, camera_config: dict):
+        self.config = camera_config
+        self.id = camera_config.get("id", "devcam")
+        self.name = camera_config.get("name", "DevCam")
+        self.fps = camera_config.get("fps", 30)
+
+        # Instantiate a dedicated CMMCorePlus for this camera
+        self.core = CMMCorePlus()
+
+        # Load and initialize the Micro-Manager configuration file, if specified
+        if "configuration_path" in camera_config:
+            self.core.loadSystemConfiguration(camera_config["configuration_path"])
+        else:
+            print(f"{self.__class__.__module__}.{self.__class__.__name__} loading {self.name}")
+            self.core.loadSystemConfiguration()
+
+        # Create an Engine and associate it with this camera
+        if self.id == 'pupil':
+            self.engine = PupilEngine(self.core, use_hardware_sequencing=True)
+            self.core.mda.set_engine(self.engine)
+        elif self.id == 'meso':
+            self.engine = MesoEngine(self.core, use_hardware_sequencing=True)
+            self.core.mda.set_engine(self.engine)
+        else:
+            self.engine = DevEngine(self.core, use_hardware_sequencing=True)
+            self.core.mda.set_engine(self.engine)
+
+    def __repr__(self):
+        return (
+            f"<Camera id='{self.id}' name='{self.name}' "
+            f"config_path='{self.config.get('configuration_path', 'N/A')}'>"
+        )
+        
+    #IF the camera_config has properties, load them into the core
+    def load_properties(self):
+        for prop, value in self.config.get('properties', {}).items():
+            self.core.setProperty('Core', prop, value)
+
+
 class Encoder:
-    type: str = 'dev'
-    port: str = 'COM4'
-    baudrate: int = 57600
-    cpr: int = 2400
-    diameter_mm: float = 80
-    sample_interval_ms: int = 20
-    reverse: int = -1
-    encoder: Optional[SerialWorker] = None
+    """
+    Represents an abstracted encoder device (e.g., Arduino).
+    Could be extended for NI-DAQ or other devices in the future.
+    """
 
-    def __post_init__(self):
-        # Create a SerialWorkerData instance with Encoder configurations
-        self.encoder = SerialWorker(
+    def __init__(self, config: dict):
+        self.config = config
+        self.type: str = config.get("type", "dev")
+        self.port: str = config.get("port")
+        self.baudrate: int = config.get("baud_rate", 57600)
+        self.sample_interval_ms: int = config.get("sample_interval_ms", 20)
+        self.diameter_mm: int = config.get("wheel_diameter_mm", 80)
+        self.cpr: int = config.get("cpr", 2400)
+        self.worker: SerialWorker = None
+        self.development_mode: bool = True if self.type == 'dev' else False
+        
+        self._create_worker()
+
+    def __repr__(self):
+        return (
+            f"<Encoder type='{self.type}' port='{self.port}' "
+            f"config={self.config}>"
+        )
+        
+    def _verify_connection(self):
+        try:
+            with serial.Serial(self.port, self.config.get("baud_rate", 9600), timeout=1) as test:
+                pass
+        except serial.SerialException:
+            print(f"Failed to connect to encoder at port {self.port}.")
+    
+    def _create_worker(self):
+        
+        self._verify_connection()
+        
+        self.worker = SerialWorker(
             serial_port=self.port,
             baud_rate=self.baudrate,
             sample_interval=self.sample_interval_ms,
             wheel_diameter=self.diameter_mm,
             cpr=self.cpr,
-            development_mode=True if self.type == 'dev' else False,
+            development_mode=self.development_mode
         )
-
-    def __repr__(self):
-        return (
-            f"Encoder(\n"
-            f"  encoder={repr(self.encoder)}"
-        )
-    
+        
     def get_data(self):
-        return self.encoder.get_data()
-    
-@dataclass
-class Engine:
-    ''' Engine dataclass to create different engine types for MDA '''
-    name: str
-    use_hardware_sequencing: bool = True
+        return self.worker.get_data()
+        
 
-    def create_engine(self, mmcore: CMMCorePlus):
-        # Create an appropriate engine based on the given name
-        if self.name == 'DevEngine':
-            return DevEngine(mmcore, use_hardware_sequencing=self.use_hardware_sequencing)
-        elif self.name == 'MesoEngine':
-            return MesoEngine(mmcore, use_hardware_sequencing=self.use_hardware_sequencing)
-        elif self.name == 'PupilEngine':
-            return PupilEngine(mmcore, use_hardware_sequencing=self.use_hardware_sequencing)
-        else:
-            raise ValueError(f"Unknown engine type: {self.name}")     
+class Daq:
+    """
+    Represents an abstracted NI-DAQ device.
+    """
 
-@dataclass
-class Core:
-    ''' MicroManager Core dataclass to manage MicroManager properties, configurations, and MDA engines
-    '''
-    name: str
-    configuration_path: Optional[str] = None
-    memory_buffer_size: int = 2000
-    use_hardware_sequencing: bool = True
-    roi: Optional[List[int]] = None  # (x, y, width, height)
-    trigger_port: Optional[int] = None
-    properties: Dict[str, str] = field(default_factory=dict)
-    core: Optional[CMMCorePlus] = field(default=None, init=False)
-    engine: Optional[MDAEngine] = None
+    def __init__(self, config: dict):
+        self.config = config
+        self.type = config.get("type", "unknown")
+        self.port = config.get("port")
+
 
     def __repr__(self):
         return (
-            f"Core:\n"
-            f"  name='{self.name}',\n"
-            f"  core={repr(self.core)},\n"
-            f"  engine={repr(self.engine)}\n"
-            f"  configuration_path='{self.configuration_path}',\n"
-            f"  memory_buffer_size={self.memory_buffer_size},\n"
-            f"  properties={self.properties}\n\n"
+            f"<Daq type='{self.type}' port='{self.port}' "
+            f"config={self.config}>"
         )
 
-    def _load_core(self):
-        ''' Load the core with specified configurations '''
-        self.core = CMMCorePlus()
-        if self.configuration_path:
-            print(f"Loading {self.name} MicroManager configuration from {self.configuration_path}...")
-            self.core.loadSystemConfiguration(self.configuration_path)
-        else:
-            print(f"Loading {self.name} MicroManager DEMO configuration...")
-            self.core.loadSystemConfiguration()
-        # Set memory buffer size
-        self.core.setCircularBufferMemoryFootprint(self.memory_buffer_size)
-        # Load additional properties and parameters for the core
-        #self.load_properties()
-        if self.configuration_path:
-            self._load_additional_params()
-        # Attach the specified engine to the core if available
-        if self.engine:
-            self._load_engine()
-        
-    def _load_engine(self):
-        ''' Load the engine for the core '''
-        self.engine = self.engine.create_engine(self.core)
-        self.core.mda.set_engine(self.engine)
-        logging.info(f"Core loaded for {self.name} from {self.configuration_path} with memory footprint: {self.core.getCircularBufferMemoryFootprint()} MB and engine {self.engine}")
+class HardwareManager:
+    """
+    High-level class that initializes all hardware (cameras, encoder, etc.)
+    using the ParameterManager. Keeps references easily accessible.
+    """
 
-    def load_properties(self):
-        # Load specific properties into the core
-        for prop, value in self.properties.items():
-            self.core.setProperty('Core', prop, value)
-        logging.info(f"Properties loaded for core {self.name}")
+    def __init__(self, config_file: str):
+        # 1) Load YAML params
+        self.pm = ParameterManager(config_file)
 
-    def _load_additional_params(self):
-        ''' Load additional parameters that are specific to certain cores '''
-        # ========================== ThorCam Parameters ========================== #
-        if self.name == 'ThorCam':
-            # Specific settings for ThorCam
-            if self.roi:
-                self.core.setROI(self.name, *self.roi)
-            self.core.setExposure(20)  # Set default exposure
-            self.core.mda.engine.use_hardware_sequencing = self.use_hardware_sequencing
-            logging.info(f"Additional parameters loaded for {self.name}")
+        # 2) Build cameras and engines
+        self.cameras = {}  # dict keyed by camera id
+        self._initialize_cameras()
+
+        # 3) Build encoder device (abstract enough for other device types)
+        self.encoder = self._initialize_encoder()
+
+    def _initialize_cameras(self):
+        """
+        For each camera in the config, instantiate a `Camera` object.
+        Store them in a dictionary keyed by camera id for easy access,
+        and expose them via dot notation.
+        """
+        try:
+            camera_configs = self.pm.get_cameras()
+        except KeyError:
+            print("No camera configurations found in the YAML file.")
             
-        # ========================== Dhyana Parameters ========================== #
-        elif self.name == 'Dhyana':
-            if self.trigger_port is not None:
-                self.core.setProperty('Dhyana', 'Output Trigger Port', str(self.trigger_port))
-            # Configure Arduino switches and shutters for Dhyana setup
-            self.core.setProperty('Arduino-Switch', 'Sequence', 'On')
-            self.core.setProperty('Arduino-Shutter', 'OnOff', '1')
-            self.core.setProperty('Core', 'Shutter', 'Arduino-Shutter')
-            # Set channel group for Dhyana
-            self.core.setChannelGroup('Channel')
-            self.core.mda.engine.use_hardware_sequencing = self.use_hardware_sequencing
-            logging.info(f"Additional parameters loaded for {self.name}")
+        for cfg in camera_configs:
+            cam = Camera(cfg)
+            self.cameras[cam.id] = cam
+            setattr(self, cam.id, cam)
 
-@dataclass
-class Startup:
-    ''' Startup dataclass for managing the initial configuration of cores and other components '''
-        
-    _widefield_micromanager_path: str = 'C:/Program Files/Micro-Manager-2.0gamma'
-    _thorcam_micromanager_path: str = 'C:/Program Files/Micro-Manager-thor'
-    _memory_buffer_size: int = 10000
-    _dhyana_fps: int = 49
-    _thorcam_fps: int = 30
-    
-    encoder: Encoder = field(default_factory=lambda: Encoder())
-    
-    widefield: Core = field(default_factory=lambda: Core(
-        name='DevCam',
-        memory_buffer_size=10000,
-        use_hardware_sequencing=True,
-        engine=Engine(name='DevEngine', use_hardware_sequencing=True)
-    ))
-    
-    thorcam: Core = field(default_factory=lambda: Core(
-        name='DevCam',
-        memory_buffer_size=10000,
-        use_hardware_sequencing=True,
-        engine=Engine(name='DevEngine', use_hardware_sequencing=True)
-    ))
+    def configure_engines(self, cfg):
+        """
+        For each camera.core.mda.engine._set_config(cfg)
+        """
+        for cam in self.cameras.values():
+            cam.engine.set_config(cfg)
+
+    def _initialize_encoder(self):
+        """
+        Optionally create an Encoder object if the config includes encoder info.
+        In the future, could handle 'nidaq' or other hardware as well.
+        """
+        encoder_config = self.pm.get_encoder_config()
+        if encoder_config:
+            return Encoder(encoder_config)
+        return None
 
     def __repr__(self):
         return (
-            f"HARDWARE:\n"
-            f"====================\n"
-            f"encoder={repr(self.encoder)}\n"
-            f'\nCORES:\n'
-            f"====================\n"
-            f"MMCORE 1={repr(self.widefield)}"
-            f"  dhyana_fps={self._dhyana_fps}\n\n"
-            f"MMCORE 2={repr(self.thorcam)}"
-            f"  thorcam_fps={self._thorcam_fps} \n"
+            "<HardwareManager>\n"
+            f"  Cameras: {list(self.cameras.keys())}\n"
+            f"  Encoder: {self.encoder}\n"
+            f"  Config: {self.pm}\n"
+            "</HardwareManager>"
         )
 
-    @classmethod
-    def _from_json(cls, file_path: str):
-        ''' Load configuration parameters from a JSON file '''
-        
-        with open(file_path, 'r') as file:
-            json_data = json.load(file)
-        
-        if 'encoder' in json_data:
-            json_data['encoder'] = Encoder(**json_data['encoder'])
-        
-        if 'widefield' in json_data:
-            # Create Core instance without engine
-            core_data = json_data['widefield']
-            core_instance = Core(**core_data)
-            # Manually set the engine
-            core_instance.engine = Engine(name='MesoEngine', use_hardware_sequencing=core_data.get('use_hardware_sequencing', True))
-            json_data['widefield'] = core_instance
-        
-        if 'thorcam' in json_data:
-            core_data = json_data['thorcam']
-            core_instance = Core(**core_data)
-            # Manually set the engine
-            core_instance.engine = Engine(name='PupilEngine', use_hardware_sequencing=core_data.get('use_hardware_sequencing', True))
-            json_data['thorcam'] = core_instance
-        
-        return cls(**json_data)
-    
-    def initialize_cores(self, cfg):
-        # Initialize widefield and thorcam cores
-        self.widefield._load_core()
-        self.thorcam._load_core()
-        self.widefield.engine.set_config(cfg)
-        self.thorcam.engine.set_config(cfg)
-        logging.info("Cores initialized")
+
+def main():
+    # Example usage: load from a YAML file (e.g. 'params.yaml')
+    config_path = "hardware.yaml"
+    hardware = HardwareManager(config_path)
+
+    # # Print everything for demonstration (showing __repr__ output):
+    # print(hardware)
+
+    # # Access cameras or encoder from hardware
+    # if "thorcam" in hardware.cameras:
+    #     thorcam = hardware.cameras["thorcam"]
+    #     print("\nInspecting ThorCam details:")har
+    #     print(thorcam)
+    #     print("Engine:", thorcam.engine)
+    #     print("core")
+
+    # if hardware.encoder is not None:
+    #     print("\nEncoder details:")
+    #     print(hardware.encoder)
 
 
+# if __name__ == "__main__":
+#     main()
 
-
-''' Example Default widefield and thorcam Core dataclass instances 
-
-```python
-
-    widefield: Core = field(default_factory=lambda: Core(
-        name='Dhyana',
-        configuration_path='C:/Program Files/Micro-Manager-2.0/mm-sipefield.cfg',
-        memory_buffer_size=10000,
-        use_hardware_sequencing=True,
-        trigger_port=2,
-        properties={
-            'Arduino-Switch': 'Sequence',
-            'Arduino-Shutter': 'OnOff',
-            'Core': 'Shutter'
-        },
-        engine=Engine(name='MesoEngine', use_hardware_sequencing=True)
-    ))
-    
-    thorcam: Core = field(default_factory=lambda: Core(
-        name='ThorCam',
-        configuration_path='C:/Program Files/Micro-Manager-2.0/ThorCam.cfg',
-        memory_buffer_size=10000,
-        use_hardware_sequencing=True,
-        roi=[440, 305, 509, 509],
-        properties={
-            'Exposure': '20'
-        },
-        engine=Engine(name='PupilEngine', use_hardware_sequencing=True)
-    ))
-    
-```
-    
-'''
+#embed()

@@ -1,0 +1,31 @@
+_widefield_micromanager_path: "C:/Program Files/Micro-Manager-2.0gamma"
+_thorcam_micromanager_path: "C:/Program Files/Micro-Manager-thor"
+_memory_buffer_size: 10000
+
+encoder:
+  type: "dev"
+  port: "COM4"
+  baudrate: 57600
+  cpr: 2400
+  diameter_mm: 80
+  sample_interval_ms: 20
+  development_mode: true
+
+cameras:
+  - id: "thorcam"
+    name: "pupil"
+    use_hardware_sequencing: true
+    roi: [440, 305, 509, 509]
+    properties:
+      Exposure: "20"
+      fps: 30
+
+  - id: "dhyana"
+    name: "mesoscope"
+    use_hardware_sequencing: true
+    trigger_port: 2
+    properties:
+      Arduino-Switch: "Sequence"
+      Arduino-Shutter: "OnOff"
+      Core: "Shutter"
+      fps: 49

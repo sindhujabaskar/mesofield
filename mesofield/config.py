@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from mesofield.io import SerialWorker
     
-from mesofield.startup import Startup
+from mesofield.startup import HardwareManager
 
 class ExperimentConfig:
     """## Generate and store parameters loaded from a JSON file. 
@@ -41,26 +41,18 @@ class ExperimentConfig:
         self._output_path = ''
         self._save_dir = ''
 
-        if development_mode: 
-            self.hardware = Startup() 
-        else:
-            self.hardware = Startup._from_json(os.path.join(os.path.dirname(__file__), path))
-
-        # Extract FPS values from Startup instance, if available
-
-        self.dhyana_fps: int = self.hardware._dhyana_fps
-        self.thorcam_fps: int = self.hardware._thorcam_fps 
+        self.hardware = HardwareManager(path)
         
         self.notes: list = []
 
     @property
-    def _cores(self) -> tuple[CMMCorePlus, CMMCorePlus]:
-        """Return the two CMMCorePlus instances from the Startup cores."""
-        return self.hardware.widefield.core, self.hardware.thorcam.core
+    def _cores(self) -> tuple[CMMCorePlus, ...]:
+        """Return the tuple of CMMCorePlus instances from the hardware cameras."""
+        return tuple(cam.core for _, cam in self.hardware.cameras.items())
 
     @property
     def encoder(self) -> SerialWorker:
-        return self.hardware.encoder.encoder
+        return self.hardware.encoder.worker
 
     @property
     def save_dir(self) -> str:
@@ -107,11 +99,11 @@ class ExperimentConfig:
     
     @property
     def num_meso_frames(self) -> int:
-        return int(self.dhyana_fps * self.sequence_duration) 
+        return int(self.hardware.dhyana.fps * self.sequence_duration) 
     
     @property
     def num_pupil_frames(self) -> int:
-        return int((self.thorcam_fps * self.sequence_duration)) + 100 
+        return int((self.hardware.thorcam.fps * self.sequence_duration)) + 100 
     
     @property
     def num_trials(self) -> int:

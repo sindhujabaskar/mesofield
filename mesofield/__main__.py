@@ -9,7 +9,7 @@ import click
 from PyQt6.QtWidgets import QApplication
 from mesofield.gui.maingui import MainWindow
 from mesofield.config import ExperimentConfig
-from mesofield.startup import Startup
+from mesofield.startup import HardwareManager
 '''
 This is the client terminal command line interface
 
@@ -29,7 +29,7 @@ def cli():
 
 @cli.command()
 @click.option('--dev', default=False, help='launch in development mode with simulated MMCores.')
-@click.option('--params', default='params.json', help='Path to the config JSON file.')
+@click.option('--params', default='hardware.yaml', help='Path to the config JSON file.')
 def launch(dev, params):
     """ Launch mesofield acquisition interface.
     
@@ -46,9 +46,8 @@ def launch(dev, params):
     
     print('Launching mesofield acquisition interface...')
     app = QApplication([])
-    config_path = params
-    config = ExperimentConfig(config_path, dev)
-    config.hardware.initialize_cores(config)
+    config = ExperimentConfig(params, dev)
+    config.hardware.configure_engines(config)
     mesofield = MainWindow(config)
     mesofield.show()
     app.exec_()
@@ -56,7 +55,7 @@ def launch(dev, params):
 @cli.command()
 def controller():
     """Launch the mesofield controller."""
-    from mesofield.controller import Controller
+    from mesofield.gui.widgets.controller import Controller
     app = QApplication([])
     controller = Controller()
     controller.show()
