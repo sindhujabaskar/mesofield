@@ -176,13 +176,7 @@ class SerialWorker(QThread):
         module_name = self.__module__
         parent_classes = [cls.__name__ for cls in self.__class__.__bases__]
         return (
-            f"<{class_name} {parent_classes} from {module_name}> \nAttributes: \n"
-            f"Serial Port: {self.serial_port}\n"
-            f"Baud Rate: {self.baud_rate}\n"
-            f"Sample Interval (ms): {self.sample_interval_ms}\n"
-            f"Wheel Diameter (mm): {self.diameter_mm}\n"
-            f"CPR: {self.cpr}\n"
-            f"Development Mode: {self.development_mode}\n"
+            f"<{class_name} {parent_classes} from {module_name}>"
         )
 
 # Usage Example:
