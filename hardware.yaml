@@ -1,6 +1,5 @@
-_widefield_micromanager_path: "C:/Program Files/Micro-Manager-2.0gamma"
-_thorcam_micromanager_path: "C:/Program Files/Micro-Manager-thor"
-_memory_buffer_size: 10000
+memory_buffer_size: 10000
+viewer_type: "static"
 
 encoder:
   type: "dev"
@@ -12,20 +11,30 @@ encoder:
   development_mode: true
 
 cameras:
-  - id: "thorcam"
-    name: "pupil"
-    use_hardware_sequencing: true
-    roi: [440, 305, 509, 509]
-    properties:
-      Exposure: "20"
-      fps: 30
+  # - id: "thorcam"
+  #   name: "pupil"
+  #   backend: "micromanager"
+  #   micromanager_path: "C:/Program Files/Micro-Manager-thor"
+  #   use_hardware_sequencing: true
+  #   roi: [440, 305, 509, 509]
+  #   properties:
+  #     Exposure: "20"
+  #     fps: 30
 
-  - id: "dhyana"
-    name: "mesoscope"
-    use_hardware_sequencing: true
-    trigger_port: 2
+  # - id: "dhyana"
+  #   name: "mesoscope"
+  #   backend: "micromanager"
+  #   micromanager_path: "C:/Program Files/Micro-Manager-2.0gamma"
+  #   use_hardware_sequencing: true
+  #   trigger_port: 2
+  #   properties:
+  #     Arduino-Switch: "Sequence"
+  #     Arduino-Shutter: "OnOff"
+  #     Core: "Shutter"
+  #     fps: 49
+
+  - id: "arducam"
+    name: "arducam"
+    backend: "opencv"
     properties:
-      Arduino-Switch: "Sequence"
-      Arduino-Shutter: "OnOff"
-      Core: "Shutter"
-      fps: 49
+      fps: 30
