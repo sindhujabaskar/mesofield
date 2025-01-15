@@ -26,6 +26,9 @@ from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.encoder import SerialWorker
 from mesofield.io.arducam import VideoThread
 
+
+VALID_BACKENDS = {"micromanager", "opencv"}
+
 class ParameterManager:
     """
     Loads and stores parameters from a YAML configuration file.
@@ -61,8 +64,7 @@ class ParameterManager:
 
 class Camera:
     """
-    Represents one camera device plus an associated Engine.
-    Each Camera holds its own CMMCorePlus instance.
+    Represents one camera device dynamically loaded based on backend
     """
 
     def __init__(self, camera_config: dict):
@@ -74,25 +76,30 @@ class Camera:
 
         if self.backend == "micromanager":
             # Instantiate a dedicated CMMCorePlus for this camera
-            self.core = CMMCorePlus()
+            self.micromanager_path = camera_config.get("micromanager_path", None)
+            self.core = CMMCorePlus(self.micromanager_path)
 
             # Load and initialize the Micro-Manager configuration file, if specified
             if "configuration_path" in camera_config:
                 self.core.loadSystemConfiguration(camera_config["configuration_path"])
             else:
-                print(f"{self.__class__.__module__}.{self.__class__.__name__} loading {self.name}")
+                print(f"{self.__class__.__module__}.{self.__class__.__name__} loading {self.core.getDeviceAdapterSearchPaths()}")
                 self.core.loadSystemConfiguration()
 
             # Create an Engine and associate it with this camera
             if self.id == 'pupil':
                 self.engine = PupilEngine(self.core, use_hardware_sequencing=True)
                 self.core.mda.set_engine(self.engine)
+                print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {self.engine}")
             elif self.id == 'meso':
                 self.engine = MesoEngine(self.core, use_hardware_sequencing=True)
                 self.core.mda.set_engine(self.engine)
+                print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {self.engine}")
+
             else:
                 self.engine = DevEngine(self.core, use_hardware_sequencing=True)
                 self.core.mda.set_engine(self.engine)
+                print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {self.engine}")
         elif self.backend == "opencv":
 
             pass
@@ -137,9 +144,10 @@ class Encoder:
     def _verify_connection(self):
         try:
             with serial.Serial(self.port, self.config.get("baud_rate", 9600), timeout=1) as test:
+                print(f"Successfully connected to encoder at port {self.port}.")
                 pass
         except serial.SerialException:
-            print(f"Failed to connect to encoder at port {self.port}.")
+            print(f"Failed to connect to encoder at port {self.port}. Instantiating simulated device.")
     
     def _create_worker(self):
         
@@ -186,7 +194,7 @@ class HardwareManager:
         self.pm = ParameterManager(config_file)
 
         # 2) Build cameras and engines
-        self.cameras = {}  # dict keyed by camera id
+        self.cameras: tuple[Camera, ...] = ()
         self._initialize_cameras()
 
         # 3) Build encoder device (abstract enough for other device types)
@@ -195,24 +203,26 @@ class HardwareManager:
     def _initialize_cameras(self):
         """
         For each camera in the config, instantiate a `Camera` object.
-        Store them in a dictionary keyed by camera id for easy access,
-        and expose them via dot notation.
+        Store them in a tuple.
         """
         try:
             camera_configs = self.pm.get_cameras()
         except KeyError:
             print("No camera configurations found in the YAML file.")
-            
+            return
+
+        cameras = []
         for cfg in camera_configs:
             cam = Camera(cfg)
-            self.cameras[cam.id] = cam
+            cameras.append(cam)
             setattr(self, cam.id, cam)
+        self.cameras = tuple(cameras)
 
     def configure_engines(self, cfg):
         """
-        For each camera.core.mda.engine._set_config(cfg)
+        If using micromanager cameras, configure the engines <camera.core.mda.engine.set_config(cfg)>
         """
-        for cam in self.cameras.values():
+        for cam in self.cameras:
             if cam.backend == "micromanager":
                 cam.engine.set_config(cfg)
 
@@ -220,7 +230,7 @@ class HardwareManager:
         """
         Generator to iterate through cameras with a specific backend.
         """
-        for cam_id, cam in self.cameras.items():
+        for cam in self.cameras:
             if cam.backend == backend:
                 yield cam
 
@@ -228,11 +238,10 @@ class HardwareManager:
         """
         Test if the backend values of cameras are either 'micromanager' or 'opencv'.
         """
-        valid_backends = {"micromanager", "opencv"}
         for cam in self.cam_backends("micromanager"):
-            assert cam.backend in valid_backends, f"Invalid backend {cam.backend} for camera {cam.id}"
+            assert cam.backend in VALID_BACKENDS, f"Invalid backend {cam.backend} for camera {cam.id}"
         for cam in self.cam_backends("opencv"):
-            assert cam.backend in valid_backends, f"Invalid backend {cam.backend} for camera {cam.id}"
+            assert cam.backend in VALID_BACKENDS, f"Invalid backend {cam.backend} for camera {cam.id}"
 
     def _initialize_encoder(self):
         """
@@ -247,7 +256,7 @@ class HardwareManager:
     def __repr__(self):
         return (
             "<HardwareManager>\n"
-            f"  Cameras: {list(self.cameras.keys())}\n"
+            f"  Cameras: {[cam.id for cam in self.cameras]}\n"
             f"  Encoder: {self.encoder}\n"
             f"  Config: {self.pm}\n"
             "</HardwareManager>"
