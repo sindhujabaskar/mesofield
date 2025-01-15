@@ -16,6 +16,7 @@ class EncoderWidget(QWidget):
         self.encoder: SerialWorker = cfg.encoder
         self.init_ui()
         self.init_data()
+        self.setFixedHeight(300)
 
     def init_ui(self):
         self.layout = QVBoxLayout()
