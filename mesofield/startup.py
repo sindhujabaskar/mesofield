@@ -24,6 +24,7 @@ from pymmcore_plus import CMMCorePlus
 
 from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.encoder import SerialWorker
+from mesofield.io.arducam import VideoThread
 
 class ParameterManager:
     """
@@ -68,28 +69,33 @@ class Camera:
         self.config = camera_config
         self.id = camera_config.get("id", "devcam")
         self.name = camera_config.get("name", "DevCam")
+        self.backend = camera_config.get("backend", "micromanager")
         self.fps = camera_config.get("fps", 30)
 
-        # Instantiate a dedicated CMMCorePlus for this camera
-        self.core = CMMCorePlus()
+        if self.backend == "micromanager":
+            # Instantiate a dedicated CMMCorePlus for this camera
+            self.core = CMMCorePlus()
 
-        # Load and initialize the Micro-Manager configuration file, if specified
-        if "configuration_path" in camera_config:
-            self.core.loadSystemConfiguration(camera_config["configuration_path"])
-        else:
-            print(f"{self.__class__.__module__}.{self.__class__.__name__} loading {self.name}")
-            self.core.loadSystemConfiguration()
+            # Load and initialize the Micro-Manager configuration file, if specified
+            if "configuration_path" in camera_config:
+                self.core.loadSystemConfiguration(camera_config["configuration_path"])
+            else:
+                print(f"{self.__class__.__module__}.{self.__class__.__name__} loading {self.name}")
+                self.core.loadSystemConfiguration()
 
-        # Create an Engine and associate it with this camera
-        if self.id == 'pupil':
-            self.engine = PupilEngine(self.core, use_hardware_sequencing=True)
-            self.core.mda.set_engine(self.engine)
-        elif self.id == 'meso':
-            self.engine = MesoEngine(self.core, use_hardware_sequencing=True)
-            self.core.mda.set_engine(self.engine)
-        else:
-            self.engine = DevEngine(self.core, use_hardware_sequencing=True)
-            self.core.mda.set_engine(self.engine)
+            # Create an Engine and associate it with this camera
+            if self.id == 'pupil':
+                self.engine = PupilEngine(self.core, use_hardware_sequencing=True)
+                self.core.mda.set_engine(self.engine)
+            elif self.id == 'meso':
+                self.engine = MesoEngine(self.core, use_hardware_sequencing=True)
+                self.core.mda.set_engine(self.engine)
+            else:
+                self.engine = DevEngine(self.core, use_hardware_sequencing=True)
+                self.core.mda.set_engine(self.engine)
+        elif self.backend == "opencv":
+
+            pass
 
     def __repr__(self):
         return (
@@ -207,7 +213,26 @@ class HardwareManager:
         For each camera.core.mda.engine._set_config(cfg)
         """
         for cam in self.cameras.values():
-            cam.engine.set_config(cfg)
+            if cam.backend == "micromanager":
+                cam.engine.set_config(cfg)
+
+    def cam_backends(self, backend):
+        """
+        Generator to iterate through cameras with a specific backend.
+        """
+        for cam_id, cam in self.cameras.items():
+            if cam.backend == backend:
+                yield cam
+
+    def test_camera_backends(self):
+        """
+        Test if the backend values of cameras are either 'micromanager' or 'opencv'.
+        """
+        valid_backends = {"micromanager", "opencv"}
+        for cam in self.cam_backends("micromanager"):
+            assert cam.backend in valid_backends, f"Invalid backend {cam.backend} for camera {cam.id}"
+        for cam in self.cam_backends("opencv"):
+            assert cam.backend in valid_backends, f"Invalid backend {cam.backend} for camera {cam.id}"
 
     def _initialize_encoder(self):
         """

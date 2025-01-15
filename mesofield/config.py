@@ -48,7 +48,7 @@ class ExperimentConfig:
     @property
     def _cores(self) -> tuple[CMMCorePlus, ...]:
         """Return the tuple of CMMCorePlus instances from the hardware cameras."""
-        return tuple(cam.core for _, cam in self.hardware.cameras.items())
+        return tuple(cam.core for _, cam in self.hardware.cameras.items() if cam.backend == "micromanager")
 
     @property
     def encoder(self) -> SerialWorker:

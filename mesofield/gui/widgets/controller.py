@@ -81,18 +81,35 @@ class ConfigController(QWidget):
     
     def __init__(self, cfg):
         super().__init__()
-        self.mmcores: tuple[CMMCorePlus, CMMCorePlus] = cfg._cores
+        self.mmcores: tuple[CMMCorePlus, CMMCorePlus] = None
+        self.mmcores = cfg._cores
         # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
-        if len(self.mmcores) == 2:
-            self._mmc1: CMMCorePlus = cfg._cores[0]
-            self._mmc2: CMMCorePlus = cfg._cores[1]
-        else:
-            self._mmc2: CMMCorePlus = cfg._cores[0]
+
+        # if self.mmcores is not None:
+        #     if len(self.mmcores) == 2:
+        #         self._mmc1: CMMCorePlus = cfg._cores[0]
+        #         self._mmc2: CMMCorePlus = cfg._cores[1]
+        #     else:
+        #         self._mmc2: CMMCorePlus = cfg._cores[0]
         self.config: ExperimentConfig = cfg
+        valid_backends = {"micromanager", "opencv"}
+        for cam in self.config.hardware.cam_backends("micromanager"):
+            assert cam.backend in valid_backends, f"Invalid backend {cam.backend} for camera {cam.id}"
+        for cam in self.config.hardware.cam_backends("opencv"):
+            assert cam.backend in valid_backends, f"Invalid backend {cam.backend} for camera {cam.id}"
+
+        # if self.cameras[].backend == "opencv":
+        #     pass
+        # elif self.cameras[0] == "dhyana":
+        #     self._mmc1 = self.cameras[0].core
+        # elif self.config.hardware.cameras[1].backend == "micromanager":
+        #     self._mmc2 = self.cameras[1].core
+
         self.psychopy_process = None
 
         # Create main layout
         self.layout = QVBoxLayout(self)
+        self.setFixedWidth(500)
 
         # ==================================== GUI Widgets ===================================== #
 

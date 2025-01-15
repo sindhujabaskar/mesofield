@@ -103,12 +103,17 @@ class MainWindow(QMainWindow):
 
         # Expose variables to the console's namespace
         self.kernel.shell.push({
-            'mda': self.acquisition_gui.mda,
+            #'mda': self.acquisition_gui.mda,
             'self': self,
             'config': cfg,
             # Optional, so you can use 'self' directly in the console
         })
     #----------------------------------------------------------------------------#
+
+    def closeEvent(self, event):
+        if self.config.hardware.cameras[0].backend == "opencv":
+            self.config.hardware.cameras[0].thread.stop()
+            event.accept()
 
     #============================== Private Methods =============================#
     def _on_end(self) -> None:

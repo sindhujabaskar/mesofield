@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QWidget,
+    QSizePolicy
 )
 
 from pymmcore_widgets import (
@@ -16,7 +17,8 @@ from pymmcore_widgets import (
 
 from mesofield.config import ExperimentConfig
 from mesofield.io.writer import CustomWriter
-from .viewer import ImagePreview
+from .viewer import ImagePreview, InteractivePreview
+from mesofield.io.arducam import VideoThread
 
 class CustomMDAWidget(MDAWidget):
     def run_mda(self) -> None:
@@ -90,81 +92,97 @@ class MDA(QWidget):
         self.mmcores: tuple[CMMCorePlus, CMMCorePlus] = config._cores
 
         # instantiate the MDAWidget
-        self.mda = CustomMDAWidget(mmcore=self.mmcores[0])
+        #self.mda = MDAWidget(mmcore=self.mmcores[0])
         # ----------------------------------Auto-set MDASequence and save_info----------------------------------#
-        self.mda.setValue(config.pupil_sequence)
-        self.mda.save_info.setValue({'save_dir': r'C:/dev', 'save_name': 'file', 'format': 'ome-tiff', 'should_save': True})
+        #self.mda.setValue(config.pupil_sequence)
+        #self.mda.save_info.setValue({'save_dir': r'C:/dev', 'save_name': 'file', 'format': 'ome-tiff', 'should_save': True})
         # -------------------------------------------------------------------------------------------------------#
         self.setLayout(QHBoxLayout())
 
         live_viewer = QGroupBox()
         live_viewer.setLayout(QVBoxLayout())
+        live_viewer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         buttons = QGroupBox()
         buttons.setLayout(QHBoxLayout())
 
-        if len(self.mmcores) == 1:
-            '''Single Core Layout'''
-            
+        if len(config._cores) > 0:
+            if len(self.mmcores) == 1:
+                '''Single Core Layout'''
+                
+                core_layout = QGroupBox("Live Viewer")
+                core_layout.setLayout(QVBoxLayout())
+
+                self.mmc: CMMCorePlus = self.mmcores[0]
+                self.preview = InteractivePreview(mmcore=self.mmc)#, parent=self.mda)
+                self.snap_button = SnapButton(mmcore=self.mmc)
+                self.live_button = LiveButton(mmcore=self.mmc)
+                self.exposure = ExposureWidget(mmcore=self.mmc)
+
+                viewer_layout = QVBoxLayout()
+                buttons = QGroupBox(f"{self.mmc.getDeviceName('Camera')}")
+                buttons.setLayout(QHBoxLayout())
+                buttons.layout().addWidget(self.snap_button)
+                buttons.layout().addWidget(self.live_button)
+                viewer_layout.addWidget(buttons)
+                viewer_layout.addWidget(self.preview)
+                
+                core_layout.layout().addLayout(viewer_layout)
+
+                #self.layout().addWidget(self.mda)
+                self.layout().addWidget(core_layout)
+
+            elif len(self.mmcores) == 2:
+                '''Dual Core Layout'''
+                
+                self.preview1 = InteractivePreview(mmcore=self.mmcores[0])#, parent=self.mda)
+                self.preview2 = InteractivePreview(mmcore=self.mmcores[1])#, parent=self.mda)
+                snap_button1 = SnapButton(mmcore=self.mmcores[0])
+                live_button1 = LiveButton(mmcore=self.mmcores[0])
+                snap_button2 = SnapButton(mmcore=self.mmcores[1])
+                live_button2 = LiveButton(mmcore=self.mmcores[1])
+
+                #==================== 2 Viewer Layout ===================#
+                cores_groupbox = QGroupBox("Live Viewer")
+                cores_groupbox.setLayout(QHBoxLayout())
+
+                #-------------------- Core 1 Viewer ---------------------#
+                core1_layout = QVBoxLayout()
+
+                buttons1 = QGroupBox(f"{self.mmcores[0].getDeviceName('Camera')}")
+                buttons1.setLayout(QHBoxLayout())
+                buttons1.layout().addWidget(snap_button1)
+                buttons1.layout().addWidget(live_button1)
+                core1_layout.addWidget(buttons1)
+                core1_layout.addWidget(self.preview1)
+
+                #-------------------- Core 2 Viewer ---------------------#
+                core2_layout = QVBoxLayout()
+
+                buttons2 = QGroupBox(f"{self.mmcores[1].getDeviceName('Camera')}")
+                buttons2.setLayout(QHBoxLayout())
+                buttons2.layout().addWidget(snap_button2)
+                buttons2.layout().addWidget(live_button2)
+                core2_layout.addWidget(buttons2)
+                core2_layout.addWidget(self.preview2)
+
+                #================ Add Widgets to Layout =================#
+                cores_groupbox.layout().addLayout(core1_layout)
+                cores_groupbox.layout().addLayout(core2_layout)
+
+                #self.layout().addWidget(self.mda)
+                self.layout().addWidget(cores_groupbox)
+
+        else:# config.hardware.cam_backends == "opencv":
+            self.thread = config.hardware.arducam.thread
             core_layout = QGroupBox("Live Viewer")
             core_layout.setLayout(QVBoxLayout())
 
-            self.mmc: CMMCorePlus = self.mmcores[0]
-            self.preview = ImagePreview(mmcore=self.mmc, parent=self.mda)
-            self.snap_button = SnapButton(mmcore=self.mmc)
-            self.live_button = LiveButton(mmcore=self.mmc)
-            self.exposure = ExposureWidget(mmcore=self.mmc)
+            self.preview = InteractivePreview(parent=self, image_payload=self.thread.image_ready)
 
             viewer_layout = QVBoxLayout()
-            buttons = QGroupBox(f"{self.mmc.getDeviceName('Camera')}")
-            buttons.setLayout(QHBoxLayout())
-            buttons.layout().addWidget(self.snap_button)
-            buttons.layout().addWidget(self.live_button)
-            viewer_layout.addWidget(buttons)
             viewer_layout.addWidget(self.preview)
-            
-            core_layout.layout().addLayout(viewer_layout)
 
-            self.layout().addWidget(self.mda)
+            core_layout.layout().addLayout(viewer_layout)
             self.layout().addWidget(core_layout)
 
-        elif len(self.mmcores) == 2:
-            '''Dual Core Layout'''
-            
-            self.preview1 = ImagePreview(mmcore=self.mmcores[0], parent=self.mda)
-            self.preview2 = ImagePreview(mmcore=self.mmcores[1], parent=self.mda)
-            snap_button1 = SnapButton(mmcore=self.mmcores[0])
-            live_button1 = LiveButton(mmcore=self.mmcores[0])
-            snap_button2 = SnapButton(mmcore=self.mmcores[1])
-            live_button2 = LiveButton(mmcore=self.mmcores[1])
-
-            #==================== 2 Viewer Layout ===================#
-            cores_groupbox = QGroupBox("Live Viewer")
-            cores_groupbox.setLayout(QHBoxLayout())
-
-            #-------------------- Core 1 Viewer ---------------------#
-            core1_layout = QVBoxLayout()
-
-            buttons1 = QGroupBox(f"{self.mmcores[0].getDeviceName('Camera')}")
-            buttons1.setLayout(QHBoxLayout())
-            buttons1.layout().addWidget(snap_button1)
-            buttons1.layout().addWidget(live_button1)
-            core1_layout.addWidget(buttons1)
-            core1_layout.addWidget(self.preview1)
-
-            #-------------------- Core 2 Viewer ---------------------#
-            core2_layout = QVBoxLayout()
-
-            buttons2 = QGroupBox(f"{self.mmcores[1].getDeviceName('Camera')}")
-            buttons2.setLayout(QHBoxLayout())
-            buttons2.layout().addWidget(snap_button2)
-            buttons2.layout().addWidget(live_button2)
-            core2_layout.addWidget(buttons2)
-            core2_layout.addWidget(self.preview2)
-
-            #================ Add Widgets to Layout =================#
-            cores_groupbox.layout().addLayout(core1_layout)
-            cores_groupbox.layout().addLayout(core2_layout)
-
-            self.layout().addWidget(self.mda)
-            self.layout().addWidget(cores_groupbox)
-        
+            self.thread.start()
