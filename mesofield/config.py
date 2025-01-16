@@ -52,7 +52,7 @@ class ExperimentConfig:
 
     @property
     def encoder(self) -> SerialWorker:
-        return self.hardware.encoder.worker
+        return self.hardware.encoder
 
     @property
     def save_dir(self) -> str:
