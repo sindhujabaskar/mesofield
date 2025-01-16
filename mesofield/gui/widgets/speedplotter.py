@@ -13,7 +13,7 @@ class EncoderWidget(QWidget):
     def __init__(self, cfg):
         super().__init__()
         self.config = cfg
-        self.encoder: SerialWorker = cfg.encoder
+        self.encoder: SerialWorker = cfg.hardware.encoder
         self.init_ui()
         self.init_data()
         self.setFixedHeight(300)
