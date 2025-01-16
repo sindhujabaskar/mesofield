@@ -18,6 +18,7 @@ Requires:
 
 import serial
 import yaml
+import logging
 from pathlib import Path
 from IPython import embed
 from pymmcore_plus import CMMCorePlus
@@ -26,6 +27,11 @@ from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.encoder import SerialWorker
 from mesofield.io.arducam import VideoThread
 
+# Disable pymmcore-plus logger
+package_logger = logging.getLogger('pymmcore-plus')
+
+# Set the logging level to CRITICAL to suppress lower-level logs
+package_logger.setLevel(logging.CRITICAL)
 
 VALID_BACKENDS = {"micromanager", "opencv"}
 
@@ -87,22 +93,22 @@ class Camera:
                 self.core.loadSystemConfiguration()
 
             # Create an Engine and associate it with this camera
-            if self.id == 'pupil':
+            if self.id == 'thorcam':
                 self.engine = PupilEngine(self.core, use_hardware_sequencing=True)
                 self.core.mda.set_engine(self.engine)
                 print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {self.engine}")
-            elif self.id == 'meso':
+            elif self.id == 'dhyana':
                 self.engine = MesoEngine(self.core, use_hardware_sequencing=True)
                 self.core.mda.set_engine(self.engine)
                 print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {self.engine}")
-
             else:
                 self.engine = DevEngine(self.core, use_hardware_sequencing=True)
                 self.core.mda.set_engine(self.engine)
                 print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {self.engine}")
         elif self.backend == "opencv":
-
             pass
+        
+        self.load_properties()
 
     def __repr__(self):
         return (
@@ -113,7 +119,19 @@ class Camera:
     #IF the camera_config has properties, load them into the core
     def load_properties(self):
         for prop, value in self.config.get('properties', {}).items():
-            self.core.setProperty('Core', prop, value)
+            if isinstance(value, str) and value.isdigit():
+                value = int(value)
+            if prop == 'Exposure':
+                self.core.setExposure(value)
+            if prop == 'roi':
+                self.core.setROI(*value)
+            if prop == 'trigger_port':
+                self.core.setProperty(self.id.capitalize(), 'Output Trigger Port', str(value))
+            if prop == 'Arduino-Shutter' and value == 'True':
+                self.core.setProperty('Arduino-Switch', 'Sequence', 'On')
+                self.core.setProperty('Arduino-Shutter', 'OnOff', '1')
+                self.core.setProperty('Core', 'Shutter', 'Arduino-Shutter')
+                self.core.setChannelGroup('Channel')
 
 
 class Encoder:
@@ -131,7 +149,7 @@ class Encoder:
         self.diameter_mm: int = config.get("wheel_diameter_mm", 80)
         self.cpr: int = config.get("cpr", 2400)
         self.worker: SerialWorker = None
-        self.development_mode: bool = True if self.type == 'dev' else False
+        self.development_mode: bool = config.get("development_mode", True)
         
         self._create_worker()
 
@@ -140,18 +158,8 @@ class Encoder:
             f"<Encoder type='{self.type}' port='{self.port}' "
             f"config={self.config}>"
         )
-        
-    def _verify_connection(self):
-        try:
-            with serial.Serial(self.port, self.config.get("baud_rate", 9600), timeout=1) as test:
-                print(f"Successfully connected to encoder at port {self.port}.")
-                pass
-        except serial.SerialException:
-            print(f"Failed to connect to encoder at port {self.port}. Instantiating simulated device.")
     
     def _create_worker(self):
-        
-        self._verify_connection()
         
         self.worker = SerialWorker(
             serial_port=self.port,
@@ -161,6 +169,7 @@ class Encoder:
             cpr=self.cpr,
             development_mode=self.development_mode
         )
+        print(self.worker)
         
     def get_data(self):
         return self.worker.get_data()
@@ -194,7 +203,6 @@ class HardwareManager:
         self.pm = ParameterManager(config_file)
 
         # 2) Build cameras and engines
-        self.cameras: tuple[Camera, ...] = ()
         self._initialize_cameras()
 
         # 3) Build encoder device (abstract enough for other device types)
