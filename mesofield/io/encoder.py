@@ -21,12 +21,12 @@ class SerialWorker(QThread):
     # ======================================================== #
 
     def __init__(self, 
-                 serial_port: str = None, 
-                 baud_rate: int = None, 
-                 sample_interval: int = None, 
-                 wheel_diameter: float = None,
-                 cpr: int = None,
-                 development_mode=False):
+                 serial_port: str, 
+                 baud_rate: int, 
+                 sample_interval: int, 
+                 wheel_diameter: float,
+                 cpr: int,
+                 development_mode: bool = True):
         
         super().__init__()
 
@@ -63,7 +63,7 @@ class SerialWorker(QThread):
             else:
                 self.run_serial_mode()
         finally:
-            print("Simulation stopped.")
+            print("Encoder Stream stopped.")
 
     def run_serial_mode(self):
         try:
