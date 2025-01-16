@@ -425,7 +425,12 @@ class InteractivePreview(pg.ImageView):
         if img is None:
             return
         img = self._adjust_image_data(img)
-        self.setImage(img, autoLevels=(self._clims == "auto"))
+        self.setImage(img.T, 
+                      autoHistogramRange=False, 
+                      autoRange=False, 
+                      levelMode='mono', 
+                      autoLevels=(self._clims == "auto"),
+                      )
 
     def _adjust_image_data(self, img: np.ndarray) -> np.ndarray:
         img = img.astype(np.float32, copy=False)
