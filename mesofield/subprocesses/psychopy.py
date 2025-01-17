@@ -11,6 +11,7 @@ def launch(config, parent=None):
         f'{config.session}',
         f'{config.save_dir}',
         f'{config.num_trials}'
+        # TODO: add triggerable parameter
     ]
     
     # Create and start the QProcess

@@ -9,7 +9,7 @@ import cv2
 from PyQt6.QtCore import pyqtSignal, QThread
 import numpy as np
 
-from mesofield.gui.widgets.viewer import InteractivePreview
+#from mesofield.gui.viewer import InteractivePreview
 
 class VideoThread(QThread):
     image_ready = pyqtSignal(np.ndarray)

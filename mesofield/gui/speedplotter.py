@@ -1,8 +1,6 @@
 # encoder_widget.py
 
-import time
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
-from PyQt6.QtCore import QTimer
 import pyqtgraph as pg
 
 from typing import TYPE_CHECKING

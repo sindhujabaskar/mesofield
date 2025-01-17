@@ -15,10 +15,8 @@ from pymmcore_widgets import (
     SnapButton,
 )
 
-from mesofield.config import ExperimentConfig
 from mesofield.io.writer import CustomWriter
-from .viewer import ImagePreview, InteractivePreview
-from mesofield.io.arducam import VideoThread
+from mesofield.gui.viewer import ImagePreview, InteractivePreview
 
 class CustomMDAWidget(MDAWidget):
     def run_mda(self) -> None:
@@ -53,7 +51,7 @@ class MDA(QWidget):
 
     """
 
-    def __init__(self, config: ExperimentConfig) -> None:
+    def __init__(self, config) -> None:
         """
 
         The layout adapts the viewer based on the number of cores:

@@ -1,11 +1,14 @@
 from contextlib import suppress
 from typing import Tuple, Union, Literal
 import numpy as np
-from pymmcore_plus import CMMCorePlus
 from qtpy.QtCore import Qt, QTimer
 from qtpy.QtGui import QImage, QPixmap
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QWidget
 from threading import Lock
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pymmcore_plus import CMMCorePlus
 
 class ImagePreview(QWidget):
     """

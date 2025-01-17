@@ -1,7 +1,5 @@
 import os
 
-from pymmcore_plus import CMMCorePlus
-
 # Necessary modules for the IPython console
 from qtconsole.rich_jupyter_widget import RichJupyterWidget
 from qtconsole.inprocess import QtInProcessKernelManager
@@ -15,14 +13,18 @@ from PyQt6.QtWidgets import (
 
 from PyQt6.QtGui import QIcon
 
-from mesofield.gui.widgets import MDA, ConfigController, EncoderWidget
-from mesofield.config import ExperimentConfig
+from mesofield.gui.mdagui import MDA
+from mesofield.gui.controller import ConfigController
+from mesofield.gui.speedplotter import EncoderWidget
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from mesofield.config import ExperimentConfig
 
 class MainWindow(QMainWindow):
-    def __init__(self, cfg: ExperimentConfig):
+    def __init__(self, cfg):
         super().__init__()
         self.setWindowTitle("Mesofield")
-        self.config: ExperimentConfig = cfg
+        self.config= cfg
 
         window_icon = QIcon(os.path.join(os.path.dirname(__file__), "Mesofield_icon.png"))
         self.setWindowIcon(window_icon)
@@ -84,7 +86,7 @@ class MainWindow(QMainWindow):
         metrics_df = calculate_metrics(wheel_df, stim_df)
         print(metrics_df)   
                 
-    def initialize_console(self, cfg: ExperimentConfig):
+    def initialize_console(self, cfg):
         """Initialize the IPython console and embed it into the application."""
         # Create an in-process kernel
         self.kernel_manager = QtInProcessKernelManager()
