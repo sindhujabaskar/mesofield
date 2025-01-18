@@ -5,11 +5,9 @@ Adapted from https://gist.github.com/docPhil99/ca4da12c9d6f29b9cea137b617c7b8b1
 
 from PyQt6.QtWidgets import QWidget, QApplication, QVBoxLayout
 import sys
-import cv2
+#import cv2
 from PyQt6.QtCore import pyqtSignal, QThread
 import numpy as np
-
-from mesofield.gui.widgets.viewer import InteractivePreview
 
 class VideoThread(QThread):
     image_ready = pyqtSignal(np.ndarray)
@@ -47,7 +45,7 @@ class App(QWidget):
         self.thread = VideoThread()
 
         # Create an ImagePreview (PlotWidget) and pass the external signal
-        self.image_preview = InteractivePreview(
+        self.image_preview = ImagePreview(
             parent=self,
             mmcore=None,  # Set appropriately or leave None
             image_payload=self.thread.image_ready

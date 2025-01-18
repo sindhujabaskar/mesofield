@@ -15,10 +15,8 @@ from pymmcore_widgets import (
     SnapButton,
 )
 
-from mesofield.config import ExperimentConfig
 from mesofield.io.writer import CustomWriter
-from .viewer import ImagePreview, InteractivePreview
-from mesofield.io.arducam import VideoThread
+from mesofield.gui.viewer import ImagePreview, InteractivePreview
 
 class CustomMDAWidget(MDAWidget):
     def run_mda(self) -> None:
@@ -53,38 +51,38 @@ class MDA(QWidget):
 
     """
 
-    def __init__(self, config: ExperimentConfig) -> None:
+    def __init__(self, config) -> None:
         """
 
         The layout adapts the viewer based on the number of cores:
 
         Single Core Layout:
 
-            +-------------------+------------------------------------------------+
-            |                   |  Live Viewer                                   |
-            |                   |  +-----------------+------------------------+  |
-            |                   |  | [Snap Button]   |    [Live Button]       |  |
-            |        MDA        |  +-----------------+------------------------+  |
-            |                   |  |                                          |  |
-            |                   |  |            Image Preview                 |  |
-            |                   |  |                                          |  |
-            |                   |  +------------------------------------------+  |
-            +-------------------+------------------------------------------------+
+            +----------------------------------------+
+            | Live Viewer                            |
+            | +-----------------+-----------------+  |
+            | | [Snap Button]   |  [Live Button}  |  |
+            | +-----------------+-----------------+  |
+            | |                                   |  |
+            | |            Image Preview          |  |
+            | |                                   |  |
+            | +-----------------------------------+  |
+            +----------------------------------------+
                 
         Dual Core Layout:
 
-            +-------------------+-------------------------------------------------+
-            |                   |   Live Viewer                                   |
-            |                   |  +-----------------------+-------------------+  |
-            |                   |  |       Core 1          |       Core 2      |  |
-            |                   |  +-----------------------+-------------------+  |
-            |                   |  |     [Buttons]         |     [Buttons]     |  |
-            |        MDA        |  +-----------------------+-------------------+  |
-            |                   |  |                       |                   |  |
-            |                   |  |    Image Preview 1    |   Image Preview 2 |  |
-            |                   |  |                       |                   |  |
-            |                   |  +-----------------------+-------------------+  |
-            +-------------------+-------------------------------------------------+
+            +-----------------------------------------------+
+            |   Live Viewer                                 |
+            |  +---------------------+-------------------+  |
+            |  |      Core 1         |      Core 2       |  |
+            |  +---------------------+-------------------+  |
+            |  |     [Buttons]       |     [Buttons]     |  |
+            |  +---------------------+-------------------+  |
+            |  |                     |                   |  |
+            |  |  Image Preview 1    |  Image Preview 2  |  |
+            |  |                     |                   |  |
+            |  +---------------------+-------------------+  |
+            +-----------------------------------------------+
 
         """
         super().__init__()
@@ -108,18 +106,19 @@ class MDA(QWidget):
         if len(config._cores) > 0:
             if len(self.mmcores) == 1:
                 '''Single Core Layout'''
-                
-                core_layout = QGroupBox("Live Viewer")
-                core_layout.setLayout(QVBoxLayout())
-
+            
                 self.mmc: CMMCorePlus = self.mmcores[0]
                 self.preview = InteractivePreview(mmcore=self.mmc)#, parent=self.mda)
                 self.snap_button = SnapButton(mmcore=self.mmc)
                 self.live_button = LiveButton(mmcore=self.mmc)
                 self.exposure = ExposureWidget(mmcore=self.mmc)
+                
+                #==================== Viewer Layout ===================#
+                core_layout = QGroupBox(title=f"{self.__module__}.{self.__class__.__name__}: Live Viewer")
+                core_layout.setLayout(QVBoxLayout())
 
                 viewer_layout = QVBoxLayout()
-                buttons = QGroupBox(f"{self.mmc.getDeviceName('Camera')}")
+                buttons = QGroupBox(f"{self.mmc.getCameraDevice()}") # f-string is needed to avoid TypeError: unable to convert a Python 'builtin_function_or_method' object to a C++ 'QString' instance
                 buttons.setLayout(QHBoxLayout())
                 buttons.layout().addWidget(self.snap_button)
                 buttons.layout().addWidget(self.live_button)
@@ -134,21 +133,21 @@ class MDA(QWidget):
             elif len(self.mmcores) == 2:
                 '''Dual Core Layout'''
                 
-                self.preview1 = InteractivePreview(mmcore=self.mmcores[0])#, parent=self.mda)
-                self.preview2 = InteractivePreview(mmcore=self.mmcores[1])#, parent=self.mda)
+                self.preview1 = ImagePreview(mmcore=self.mmcores[0])#, parent=self.mda)
+                self.preview2 = ImagePreview(mmcore=self.mmcores[1])#, parent=self.mda)
                 snap_button1 = SnapButton(mmcore=self.mmcores[0])
                 live_button1 = LiveButton(mmcore=self.mmcores[0])
                 snap_button2 = SnapButton(mmcore=self.mmcores[1])
                 live_button2 = LiveButton(mmcore=self.mmcores[1])
 
                 #==================== 2 Viewer Layout ===================#
-                cores_groupbox = QGroupBox("Live Viewer")
+                cores_groupbox = QGroupBox(title=f"{self.__module__}.{self.__class__.__name__}: Live Viewer")
                 cores_groupbox.setLayout(QHBoxLayout())
 
                 #-------------------- Core 1 Viewer ---------------------#
                 core1_layout = QVBoxLayout()
 
-                buttons1 = QGroupBox(f"{self.mmcores[0].getDeviceName('Camera')}")
+                buttons1 = QGroupBox(title=f"{self.mmcores[0].getCameraDevice()}") # f-string is needed to avoid TypeError: unable to convert a Python 'builtin_function_or_method' object to a C++ 'QString' instance
                 buttons1.setLayout(QHBoxLayout())
                 buttons1.layout().addWidget(snap_button1)
                 buttons1.layout().addWidget(live_button1)
@@ -158,7 +157,7 @@ class MDA(QWidget):
                 #-------------------- Core 2 Viewer ---------------------#
                 core2_layout = QVBoxLayout()
 
-                buttons2 = QGroupBox(f"{self.mmcores[1].getDeviceName('Camera')}")
+                buttons2 = QGroupBox(title=f"{self.mmcores[1].getCameraDevice()}") # f-string is needed to avoid TypeError: unable to convert a Python 'builtin_function_or_method' object to a C++ 'QString' instance
                 buttons2.setLayout(QHBoxLayout())
                 buttons2.layout().addWidget(snap_button2)
                 buttons2.layout().addWidget(live_button2)
@@ -172,17 +171,17 @@ class MDA(QWidget):
                 #self.layout().addWidget(self.mda)
                 self.layout().addWidget(cores_groupbox)
 
-        else:# config.hardware.cam_backends == "opencv":
-            self.thread = config.hardware.arducam.thread
-            core_layout = QGroupBox("Live Viewer")
-            core_layout.setLayout(QVBoxLayout())
+        # else:# config.hardware.cam_backends == "opencv":
+        #     #self.thread = config.hardware.arducam.thread
+        #     core_layout = QGroupBox("Live Viewer")
+        #     core_layout.setLayout(QVBoxLayout())
 
-            self.preview = InteractivePreview(parent=self, image_payload=self.thread.image_ready)
+        #     self.preview = InteractivePreview(parent=self, image_payload=self.thread.image_ready)
 
-            viewer_layout = QVBoxLayout()
-            viewer_layout.addWidget(self.preview)
+        #     viewer_layout = QVBoxLayout()
+        #     viewer_layout.addWidget(self.preview)
 
-            core_layout.layout().addLayout(viewer_layout)
-            self.layout().addWidget(core_layout)
+        #     core_layout.layout().addLayout(viewer_layout)
+        #     self.layout().addWidget(core_layout)
 
-            self.thread.start()
+        #     self.thread.start()

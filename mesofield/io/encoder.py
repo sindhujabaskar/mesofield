@@ -2,14 +2,10 @@ import random
 import time
 import math
 from queue import Queue
-
+import serial
 from PyQt6.QtCore import pyqtSignal, QThread
 
 from mesofield.io import DataManager
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from mesofield.config import ExperimentConfig
 
 class SerialWorker(QThread):
     
@@ -29,9 +25,6 @@ class SerialWorker(QThread):
                  development_mode: bool = True):
         
         super().__init__()
-
-        self.data_manager = DataManager()
-        self.data_queue: Queue = self.data_manager.data_queue
 
         self.development_mode = development_mode
 
@@ -67,9 +60,8 @@ class SerialWorker(QThread):
 
     def run_serial_mode(self):
         try:
-            import serial
             self.arduino = serial.Serial(self.serial_port, self.baud_rate, timeout=0.1)
-            self.arduino.flushInput()  # Flush any existing input
+            #self.arduino.flushInput()  # Flush any existing input
             print("Serial port opened.")
         except serial.SerialException as e:
             print(f"Serial connection error: {e}")
@@ -81,8 +73,6 @@ class SerialWorker(QThread):
                     data = self.arduino.readline().decode('utf-8').strip()
                     if data:
                         clicks = int(data)
-                        self.stored_data.append(clicks)  # Store data for later retrieval
-                        self.data_queue.put(clicks)  # Store data in the DataManager queue for access by other threads
                         self.serialDataReceived.emit(clicks)  # Emit PyQt signal for real-time plotting
                         self.process_data(clicks)
                 except ValueError:
@@ -107,7 +97,6 @@ class SerialWorker(QThread):
                 
                 # Emit signals, store data, and push to the queue
                 self.stored_data.append(clicks)  # Store data for later retrieval
-                self.data_queue.put(clicks)  # Store data in the DataManager queue for access by other threads
                 self.serialDataReceived.emit(clicks)  # Emit PyQt signal for real-time plotting
                 
                 # Optionally, simulate processing the data for speed calculation

@@ -78,8 +78,6 @@ class Camera:
             self.thread = VideoThread()
             pass
         
-        self.load_properties()
-
     def __repr__(self):
         return (
             f"<Camera id='{self.id}' name='{self.name}' "
@@ -118,7 +116,6 @@ class HardwareManager:
         self.yaml = self._load_hardware_from_yaml(config_file)
         self.cameras: tuple[Camera, ...] = ()
         self._initialize_cameras()
-        self._test_camera_backends()
         self._initialize_encoder()
 
     def __repr__(self):
@@ -130,8 +127,7 @@ class HardwareManager:
             f"  loaded_keys={list(self.params.keys())}\n"
             "</HardwareManager>"
         )
-        
-        
+            
     def _load_hardware_from_yaml(self, path):
         params = {}
 
@@ -156,32 +152,64 @@ class HardwareManager:
                 development_mode=params.get('development_mode')
             )
         
+    
         
     def _initialize_cameras(self):
-        """
-        For each camera in the config, instantiate a `Camera` object.
-        Store them in a tuple, and set them as attributes on the HardwareManager.
-        """
-        try:
-            camera_configs = self.yaml.get("cameras")
-        except KeyError:
-            print("No camera configurations found in the YAML file.")
-            return
-
         cams = []
-        for cfg in camera_configs:
-            cam = Camera(cfg)
-            cams.append(cam)
-            setattr(self, cam.id, cam)
-        self.cameras = tuple(cams)
+        for camera_config in self.yaml.get("cameras"):
+            camera_id = camera_config.get("id")
+            backend = camera_config.get("backend")
+            if backend == "micromanager":
+                core = self.get_core_object(
+                    camera_config.get("micromanager_path"),
+                    camera_config.get("configuration_path"),
+                )
+                for device_id, props in camera_config.get("properties").items():
+                    if isinstance(props, dict):
+                        for property_id, value in props.items():
+                            core.setProperty(device_id, property_id, value)
+                            if property_id == 'ROI':
+                                core.setROI(device_id, value)
+                            if property_id == 'fps':
+                                pass
+                camera_object = core.getDeviceObject(camera_id)
+                
+                if camera_id == 'ThorCam':
+                    engine = PupilEngine(core, use_hardware_sequencing=True)
+                    core.mda.set_engine(engine)
+                    print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {engine}")
+                elif camera_id == 'Dhyana':
+                    engine = MesoEngine(core, use_hardware_sequencing=True)
+                    core.mda.set_engine(engine)
+                    print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {engine}")
+                else:
+                    engine = DevEngine(core, use_hardware_sequencing=True)
+                    core.mda.set_engine(engine)
+                    print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {engine}")
+                
+            elif backend == 'opencv':
+                camera_object = VideoThread()
+                
+            cams.append(camera_object)
+            setattr(self, camera_id, camera_object)
+            self.cameras = tuple(cams)
+                
+    
+    def get_core_object(self, mm_path, mm_cfg_path):
+        core = CMMCorePlus(mm_path)
+        if mm_path is not None:
+            core.loadSystemConfiguration(mm_cfg_path)
+        return core
 
-
+    def get_property_object(core : CMMCorePlus, device_id: str, property_id: str):
+        return core.getPropertyObject(device_id, property_id)
+    
     def configure_engines(self, cfg):
         """ If using micromanager cameras, configure the engines <camera.core.mda.engine.set_config(cfg)>
         """
         for cam in self.cameras:
-            if cam.backend == "micromanager":
-                cam.engine.set_config(cfg)
+            if isinstance:
+                cam.core.mda.engine.set_config(cfg)
 
 
     def cam_backends(self, backend):

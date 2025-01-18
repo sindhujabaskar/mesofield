@@ -23,11 +23,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QImage, QPixmap
 
-from pymmcore_plus import CMMCorePlus
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from mesofield.config import ExperimentConfig
+    from pymmcore_plus import CMMCorePlus
 
 class ConfigController(QWidget):
     """AcquisitionEngine object for the napari-mesofield plugin.
@@ -81,29 +81,12 @@ class ConfigController(QWidget):
     
     def __init__(self, cfg):
         super().__init__()
-        self.mmcores: tuple[CMMCorePlus, CMMCorePlus] = None
         self.mmcores = cfg._cores
         # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
 
-        # if self.mmcores is not None:
-        #     if len(self.mmcores) == 2:
-        #         self._mmc1: CMMCorePlus = cfg._cores[0]
-        #         self._mmc2: CMMCorePlus = cfg._cores[1]
-        #     else:
-        #         self._mmc2: CMMCorePlus = cfg._cores[0]
         self.config: ExperimentConfig = cfg
-        valid_backends = {"micromanager", "opencv"}
-        for cam in self.config.hardware.cam_backends("micromanager"):
-            assert cam.backend in valid_backends, f"Invalid backend {cam.backend} for camera {cam.id}"
-        for cam in self.config.hardware.cam_backends("opencv"):
-            assert cam.backend in valid_backends, f"Invalid backend {cam.backend} for camera {cam.id}"
-
-        # if self.cameras[].backend == "opencv":
-        #     pass
-        # elif self.cameras[0] == "dhyana":
-        #     self._mmc1 = self.cameras[0].core
-        # elif self.config.hardware.cameras[1].backend == "micromanager":
-        #     self._mmc2 = self.cameras[1].core
+        self._mmc1: CMMCorePlus = self.mmcores[0]
+        self._mmc2: CMMCorePlus = self.mmcores[1]
 
         self.psychopy_process = None
 
@@ -210,14 +193,12 @@ class ConfigController(QWidget):
         """Save the snapped image to the specified directory with a unique filename."""
 
         # Generate a unique filename with a timestamp
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = self.config._generate_unique_file_path(f"snapped_{timestamp}", bids_type='func')
-        file_path = os.path.join(self.config.bids_dir, filename)
+        file_path = self.config._generate_unique_file_path(suffix="snapped", extension="png", bids_type="func")
 
         # Save the image as a PNG file using matplotlib
         import matplotlib.pyplot as plt
 
-        plt.imsave(file_path + '.png', image, cmap='gray')
+        plt.imsave(file_path, image, cmap='gray')
 
         # Close the dialog
         dialog.accept()
@@ -347,6 +328,7 @@ class ConfigController(QWidget):
         """
         try:
             led_pattern = self.config.led_pattern
+            self.config.hardware.Dhyana.core.getPropertyObject('Arduino-Switch', 'State').loadSequence(led_pattern)
             self._mmc1.getPropertyObject('Arduino-Switch', 'State').loadSequence(led_pattern)
             self._mmc1.getPropertyObject('Arduino-Switch', 'State').setValue(4) # seems essential to initiate serial communication
             self._mmc1.getPropertyObject('Arduino-Switch', 'State').startSequence()

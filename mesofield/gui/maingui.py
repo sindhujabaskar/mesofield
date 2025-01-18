@@ -1,7 +1,5 @@
 import os
 
-from pymmcore_plus import CMMCorePlus
-
 # Necessary modules for the IPython console
 from qtconsole.rich_jupyter_widget import RichJupyterWidget
 from qtconsole.inprocess import QtInProcessKernelManager
@@ -15,14 +13,18 @@ from PyQt6.QtWidgets import (
 
 from PyQt6.QtGui import QIcon
 
-from mesofield.gui.widgets import MDA, ConfigController, EncoderWidget
-from mesofield.config import ExperimentConfig
+from mesofield.gui.mdagui import MDA
+from mesofield.gui.controller import ConfigController
+from mesofield.gui.speedplotter import EncoderWidget
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from mesofield.config import ExperimentConfig
 
 class MainWindow(QMainWindow):
-    def __init__(self, cfg: ExperimentConfig):
+    def __init__(self, cfg):
         super().__init__()
         self.setWindowTitle("Mesofield")
-        self.config: ExperimentConfig = cfg
+        self.config = cfg
 
         window_icon = QIcon(os.path.join(os.path.dirname(__file__), "Mesofield_icon.png"))
         self.setWindowIcon(window_icon)
@@ -84,7 +86,7 @@ class MainWindow(QMainWindow):
         metrics_df = calculate_metrics(wheel_df, stim_df)
         print(metrics_df)   
                 
-    def initialize_console(self, cfg: ExperimentConfig):
+    def initialize_console(self, cfg):
         """Initialize the IPython console and embed it into the application."""
         # Create an in-process kernel
         self.kernel_manager = QtInProcessKernelManager()
@@ -111,9 +113,11 @@ class MainWindow(QMainWindow):
     #----------------------------------------------------------------------------#
 
     def closeEvent(self, event):
-        if self.config.hardware.cameras[0].backend == "opencv":
-            self.config.hardware.cameras[0].thread.stop()
-            event.accept()
+        if hasattr(self.config.hardware.cameras[0], 'backend'):
+            if self.config.hardware.cameras[0].backend == 'opencv':
+                self.config.hardware.cameras[0].thread.stop()
+        self.config.hardware.shutdown()
+        event.accept()
 
     #============================== Private Methods =============================#
     def _on_end(self) -> None:
@@ -123,14 +127,6 @@ class MainWindow(QMainWindow):
 
     def _update_config(self, config):
         self.config: ExperimentConfig = config
-        self._refresh_mda_gui()
-        self._refresh_save_gui()
-        
-    def _refresh_mda_gui(self):
-        self.acquisition_gui.mda.setValue(self.config.meso_sequence)
-        
-    def _refresh_save_gui(self):
-        self.acquisition_gui.mda.save_info.setValue({'save_dir': str(self.config.bids_dir),  'save_name': str(self.config.meso_file_path), 'format': 'ome-tiff', 'should_save': True})
                 
     def _on_pause(self, state: bool) -> None:
         """Called when the MDA is paused."""

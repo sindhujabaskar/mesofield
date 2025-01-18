@@ -1,17 +1,30 @@
 """CLI Interface entry point for mesofield python package"""
 
 import os
+import logging
 import argparse
+
 from PyQt6.QtWidgets import QApplication
+
 from mesofield.gui.maingui import MainWindow
 from mesofield.config import ExperimentConfig
-from mesofield.startup import HardwareManager
 
-def launch(dev, params):
+# Disable pymmcore-plus logger
+package_logger = logging.getLogger('pymmcore-plus')
+
+# Set the logging level to CRITICAL to suppress lower-level logs
+package_logger.setLevel(logging.CRITICAL)
+
+# Disable debugger warning about the use of frozen modules
+os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
+
+
+
+def launch(params):
     """Launch the mesofield acquisition interface."""
     print('Launching mesofield acquisition interface...')
     app = QApplication([])
-    config = ExperimentConfig(params, dev)
+    config = ExperimentConfig(params)
     config.hardware.configure_engines(config)
     print(config.hardware.cameras[0])
     mesofield = MainWindow(config)
@@ -20,7 +33,7 @@ def launch(dev, params):
 
 def controller():
     """Launch the mesofield controller."""
-    from mesofield.gui.widgets.controller import Controller
+    from mesofield.gui.controller import Controller
     app = QApplication([])
     c = Controller()
     c.show()
@@ -39,9 +52,7 @@ def main():
 
     # Subcommand: launch
     parser_launch = subparsers.add_parser('launch', help='Launch the mesofield acquisition interface')
-    parser_launch.add_argument('--dev', default=False, action='store_true',
-                               help='Launch in development mode with simulated MMCores')
-    parser_launch.add_argument('--params', default='hardware.yaml',
+    parser_launch.add_argument('--params', default='dev.yaml',
                                help='Path to the config file')
 
     # Subcommand: controller
@@ -58,7 +69,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == 'launch':
-        launch(args.dev, args.params)
+        launch(args.params)
     elif args.command == 'controller':
         controller()
     elif args.command == 'test_mda':

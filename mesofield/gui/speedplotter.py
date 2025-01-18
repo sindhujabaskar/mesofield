@@ -1,8 +1,4 @@
-# encoder_widget.py
-
-import time
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
-from PyQt6.QtCore import QTimer
 import pyqtgraph as pg
 
 from typing import TYPE_CHECKING
@@ -13,7 +9,7 @@ class EncoderWidget(QWidget):
     def __init__(self, cfg):
         super().__init__()
         self.config = cfg
-        self.encoder: SerialWorker = cfg.hardware.encoder
+        self.encoder: encoder = cfg.hardware.encoder
         self.init_ui()
         self.init_data()
         self.setFixedHeight(300)
