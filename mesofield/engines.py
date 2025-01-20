@@ -115,6 +115,7 @@ class MesoEngine(MDAEngine):
         # Get and store the encoder data
         self._wheel_data = self._encoder.get_data()
         self._config.save_wheel_encoder_data(self._wheel_data)
+        self._config.save_configuration()
         pass
     
 
