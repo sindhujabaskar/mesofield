@@ -1,0 +1,47 @@
+memory_buffer_size: 10000
+viewer_type: "static"
+
+encoder:
+  type: "wheel"
+  port: "COM4"
+  baudrate: 57600
+  cpr: 2400
+  diameter_mm: 80
+  sample_interval_ms: 20
+  development_mode: False
+
+cameras:
+  - id: "Dhyana"
+    name: "mesoscope"
+    backend: "micromanager"
+    micromanager_path: "C:/Program Files/Micro-Manager-2.0"
+    configuration_path: "C:/Program Files/Micro-Manager-2.0/mm-sipefield.cfg"
+    properties:
+      Dhyana:
+        Output Trigger Port: 2
+        Gain: "HDR"
+        fps: 49 # IMPORTANT: This is validated externally and is a value used merely to calculate experiment duration and frames to capture
+      Arduino-Shutter: 
+        OnOff: "1"
+      Arduino-Switch: 
+        Sequence: "On"
+      Core:
+        Shutter: "Arduino-Shutter"
+
+  - id: "ThorCam"
+    name: "pupil"
+    backend: "micromanager"
+    micromanager_path: "C:/Program Files/Micro-Manager-thor"
+    configuration_path: "C:/Program Files/Micro-Manager-2.0/ThorCam.cfg"
+    properties:
+      ThorCam:
+        Exposure: 20
+        fps: 30 # IMPORTANT: This is validated externally and is a value used merely to calculate experiment duration and frames to capture
+        ROI: [440, 305, 509, 509]
+
+
+  # - id: "arducam"
+  #   name: "arducam"
+  #   backend: "opencv"
+  #   properties:
+  #     fps: 30

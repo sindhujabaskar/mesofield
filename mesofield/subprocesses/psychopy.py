@@ -6,7 +6,6 @@ def launch(config, parent=None):
     args = [
         "C:\\Program Files\\PsychoPy\\python.exe",
         f'{config.psychopy_path}',
-        f'{config.protocol}',
         f'{config.subject}',
         f'{config.session}',
         f'{config.save_dir}',

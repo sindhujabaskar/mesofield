@@ -1,8 +1,4 @@
-# encoder_widget.py
-
-import time
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
-from PyQt6.QtCore import QTimer
 import pyqtgraph as pg
 
 from typing import TYPE_CHECKING
@@ -13,15 +9,17 @@ class EncoderWidget(QWidget):
     def __init__(self, cfg):
         super().__init__()
         self.config = cfg
-        self.encoder: SerialWorker = cfg.encoder
+        self.encoder: encoder = cfg.hardware.encoder
         self.init_ui()
         self.init_data()
+        self.setFixedHeight(300)
 
     def init_ui(self):
         self.layout = QVBoxLayout()
 
         # Status label to show connection status
         self.status_label = QLabel("Click 'Start Live View' to begin.")
+        self.info_label = QLabel(f'Viewing data from {self.encoder} at Port: {self.encoder.serial_port} | Baud: {self.encoder.baud_rate} | CPR: {self.encoder.cpr} | Diameter (mm): {self.encoder.diameter_mm}')
         self.start_button = QPushButton("Start Live View")
         self.start_button.setCheckable(True)
         self.plot_widget = pg.PlotWidget()
@@ -30,6 +28,7 @@ class EncoderWidget(QWidget):
         self.start_button.setEnabled(True)
 
         self.layout.addWidget(self.status_label)
+        self.layout.addWidget(self.info_label)
         self.layout.addWidget(self.start_button)
         self.layout.addWidget(self.plot_widget)
         self.setLayout(self.layout)

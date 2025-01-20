@@ -23,11 +23,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QImage, QPixmap
 
-from pymmcore_plus import CMMCorePlus
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from mesofield.config import ExperimentConfig
+    from pymmcore_plus import CMMCorePlus
 
 class ConfigController(QWidget):
     """AcquisitionEngine object for the napari-mesofield plugin.
@@ -81,13 +81,18 @@ class ConfigController(QWidget):
     
     def __init__(self, cfg):
         super().__init__()
-        self._mmc1: CMMCorePlus = cfg._cores[0]
-        self._mmc2: CMMCorePlus = cfg._cores[1]
+        self.mmcores = cfg._cores
+        # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
+
         self.config: ExperimentConfig = cfg
+        self._mmc1: CMMCorePlus = self.mmcores[0]
+        self._mmc2: CMMCorePlus = self.mmcores[1]
+
         self.psychopy_process = None
 
         # Create main layout
         self.layout = QVBoxLayout(self)
+        self.setFixedWidth(500)
 
         # ==================================== GUI Widgets ===================================== #
 
@@ -188,14 +193,12 @@ class ConfigController(QWidget):
         """Save the snapped image to the specified directory with a unique filename."""
 
         # Generate a unique filename with a timestamp
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = self.config._generate_unique_file_path(f"snapped_{timestamp}", bids_type='func')
-        file_path = os.path.join(self.config.bids_dir, filename)
+        file_path = self.config._generate_unique_file_path(suffix="snapped", extension="png", bids_type="func")
 
         # Save the image as a PNG file using matplotlib
         import matplotlib.pyplot as plt
 
-        plt.imsave(file_path + '.png', image, cmap='gray')
+        plt.imsave(file_path, image, cmap='gray')
 
         # Close the dialog
         dialog.accept()
@@ -205,6 +208,8 @@ class ConfigController(QWidget):
         from mesofield.io import CustomWriter
         import threading
 
+        # TODO: Add a check for the MDA sequence and pupil sequence
+        # TODO: add a triggerable parameter
         thread1 = threading.Thread(target=self._mmc1.run_mda, args=(self.config.meso_sequence,), kwargs={'output': CustomWriter(self.config.meso_file_path)})
         thread2 = threading.Thread(target=self._mmc2.run_mda, args=(self.config.pupil_sequence,), kwargs={'output': CustomWriter(self.config.pupil_file_path)})
 
@@ -323,6 +328,7 @@ class ConfigController(QWidget):
         """
         try:
             led_pattern = self.config.led_pattern
+            self.config.hardware.Dhyana.core.getPropertyObject('Arduino-Switch', 'State').loadSequence(led_pattern)
             self._mmc1.getPropertyObject('Arduino-Switch', 'State').loadSequence(led_pattern)
             self._mmc1.getPropertyObject('Arduino-Switch', 'State').setValue(4) # seems essential to initiate serial communication
             self._mmc1.getPropertyObject('Arduino-Switch', 'State').startSequence()

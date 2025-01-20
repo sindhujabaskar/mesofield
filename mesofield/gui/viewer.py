@@ -320,3 +320,142 @@ class ImagePreview(QWidget):
             The colormap to use.
         """
         self._cmap = cmap
+
+
+import pyqtgraph as pg
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtCore import Qt, QTimer
+import numpy as np
+from threading import Lock
+from contextlib import suppress
+from typing import Tuple, Union, Literal
+from pymmcore_plus import CMMCorePlus
+
+class InteractivePreview(pg.ImageView):
+    def __init__(self, parent=None, mmcore=None, use_with_mda=True, image_payload=None):
+        super().__init__(parent=parent)
+        self._mmcore: CMMCorePlus = mmcore
+        self._use_with_mda = use_with_mda
+        self._clims: Union[Tuple[float, float], Literal["auto"]] = "auto"
+        self._current_frame = np.zeros((512, 512), dtype=np.uint8)
+        self._display_image(self._current_frame)
+        self._cmap: str = "grayscale"
+        self._current_frame = None
+        self._frame_lock = Lock()
+
+        if image_payload is not None:
+            image_payload.connect(self._on_image_payload)
+
+        if self._mmcore is not None:
+            self._mmcore.events.imageSnapped.connect(self._on_image_snapped)
+            self._mmcore.events.continuousSequenceAcquisitionStarted.connect(self._on_streaming_start)
+            self._mmcore.events.sequenceAcquisitionStarted.connect(self._on_streaming_start)
+            self._mmcore.events.sequenceAcquisitionStopped.connect(self._on_streaming_stop)
+            self._mmcore.events.exposureChanged.connect(self._on_exposure_changed)
+
+            enev = self._mmcore.mda.events
+            enev.frameReady.connect(self._on_image_payload, type=Qt.ConnectionType.QueuedConnection)
+            if self._use_with_mda:
+                self._mmcore.mda.events.frameReady.connect(self._on_frame_ready)
+
+            self.streaming_timer = QTimer(parent=self)
+            self.streaming_timer.setTimerType(Qt.TimerType.PreciseTimer)
+            self.streaming_timer.setInterval(10)
+            self.streaming_timer.timeout.connect(self._on_streaming_timeout)
+
+        self.destroyed.connect(self._disconnect)
+
+    def _disconnect(self) -> None:
+        if self._mmcore:
+            ev = self._mmcore.events
+            with suppress(TypeError):
+                ev.imageSnapped.disconnect()
+                ev.continuousSequenceAcquisitionStarted.disconnect()
+                ev.sequenceAcquisitionStarted.disconnect()
+                ev.sequenceAcquisitionStopped.disconnect()
+                ev.exposureChanged.disconnect()
+            enev = self._mmcore.mda.events
+            with suppress(TypeError):
+                enev.frameReady.disconnect()
+
+    def _on_streaming_start(self) -> None:
+        if not self.streaming_timer.isActive():
+            self.streaming_timer.start()
+
+    def _on_streaming_stop(self) -> None:
+        if not self._mmcore.isSequenceRunning():
+            self.streaming_timer.stop()
+
+    def _on_exposure_changed(self, device: str, value: str) -> None:
+        exposure = self._mmcore.getExposure() or 10
+        self.streaming_timer.setInterval(int(exposure) or 10)
+
+    def _on_frame_ready(self, img: np.ndarray) -> None:
+        with self._frame_lock:
+            self._current_frame = img
+
+    def _on_streaming_timeout(self) -> None:
+        frame = None
+        if not self._mmcore.mda.is_running():
+            with suppress(RuntimeError, IndexError):
+                frame = self._mmcore.getLastImage()
+        else:
+            with self._frame_lock:
+                if self._current_frame is not None:
+                    frame = self._current_frame
+                    self._current_frame = None
+        if frame is not None:
+            self._display_image(frame)
+
+    def _on_image_snapped(self, img: np.ndarray) -> None:
+        with self._frame_lock:
+            self._current_frame = img
+        self._display_image(img)
+
+    def _on_image_payload(self, img: np.ndarray) -> None:
+        #img = self._adjust_image_data(img)
+        self.setImage(img.T, 
+                      autoHistogramRange=False, 
+                      autoRange=False, 
+                      levelMode='mono', 
+                      autoLevels=(self._clims == "auto"),
+                      )
+
+    def _display_image(self, img: np.ndarray) -> None:
+        if img is None:
+            return
+        img = self._adjust_image_data(img)
+        self.setImage(img.T, 
+                      autoHistogramRange=False, 
+                      autoRange=False, 
+                      levelMode='mono', 
+                      autoLevels=(self._clims == "auto"),
+                      )
+
+    def _adjust_image_data(self, img: np.ndarray) -> np.ndarray:
+        img = img.astype(np.float32, copy=False)
+        if self._clims == "auto":
+            min_val, max_val = np.min(img), np.max(img)
+        else:
+            min_val, max_val = self._clims
+        scale = 255.0 / (max_val - min_val) if max_val != min_val else 255.0
+        img = np.clip((img - min_val) * scale, 0, 255).astype(np.uint8, copy=False)
+        return img
+
+    # @property
+    # def clims(self) -> Union[Tuple[float, float], Literal["auto"]]:
+    #     return self._clims
+
+    # @clims.setter
+    # def clims(self, clims: Union[Tuple[float, float], Literal["auto"]] = "auto") -> None:
+    #     self._clims = clims
+    #     if self._current_frame is not None:
+    #         self._display_image(self._current_frame)
+
+    # @property
+    # def cmap(self) -> str:
+    #     return self._cmap
+
+    # @cmap.setter
+    # def cmap(self, cmap: str = "grayscale") -> None:
+    #     self._cmap = cmap

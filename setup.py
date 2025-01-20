@@ -7,7 +7,7 @@ from setuptools import find_packages, setup
 def read(*paths, **kwargs):
     """Read the contents of a text file safely.
     >>> read("mesofield", "VERSION")
-    '0.1.0'
+    '0.9.7'
     >>> read("README.md")
     ...
     """
@@ -38,7 +38,6 @@ setup(
     long_description_content_type="text/markdown",
     author="Gronemeyer",
     packages=find_packages(exclude=["tests", ".github"]),
-    install_requires=read_requirements("requirements.txt"),
     entry_points={
         "console_scripts": ["mesofield = mesofield.__main__:main"]
     },
