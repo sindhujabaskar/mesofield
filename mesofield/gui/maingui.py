@@ -126,7 +126,7 @@ class MainWindow(QMainWindow):
         self.plots()
 
     def _update_config(self, config):
-        self.config: ExperimentConfig = config
+        self.config = config
                 
     def _on_pause(self, state: bool) -> None:
         """Called when the MDA is paused."""

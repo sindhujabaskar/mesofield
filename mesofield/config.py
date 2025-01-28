@@ -36,8 +36,8 @@ class ExperimentConfig:
     ```
     """
 
-    def __init__(self, path: str = None):
-        self._parameters = {}
+    def __init__(self, path: str):
+        self._parameters: dict = {}
         self._json_file_path = ''
         self._output_path = ''
         self._save_dir = ''
@@ -265,8 +265,6 @@ class ExperimentConfig:
         except Exception as e:
             print(f"Error saving notes: {e}")
         
-            
-
 class ConfigLoader:
     def __init__(self, file_path: str):
         self.file_path = file_path
@@ -330,7 +328,7 @@ class HardwareManager:
 
     def __init__(self, config_file: str):
         self.yaml = self._load_hardware_from_yaml(config_file)
-        self.cameras: tuple[Camera, ...] = ()
+        self.cameras: tuple = ()
         self._initialize_cameras()
         self._initialize_encoder()
 
@@ -374,6 +372,35 @@ class HardwareManager:
          
          
     def _initialize_cameras(self):
+        """
+        Initialize and configure camera objects based on YAML settings.
+        This method reads the "cameras" section of a YAML configuration file,
+        iterating over each camera definition. Depending on the specified backend
+        (micromanager or opencv), it initializes and returns corresponding camera
+        objects while applying any device-specific properties (e.g., ROI, fps, and
+        other hardware settings).
+        
+        For Micro-Manager backends:
+            - Creates an engine instance based on the camera ID (ThorCam, Dhyana, or a
+                generic DevEngine).
+            - Loads the Micro-Manager core, optionally setting hardware sequencing.
+            - Applies properties from the configuration file, including ROI and fps.
+        
+        For OpenCV backends:
+            - Creates a simple VideoThread instance.
+            
+        All resulting camera objects are placed into a tuple stored in the 'cameras'
+        attribute of the object, and instance attributes are created for each by
+        camera id enabling their access elsewhere:
+        
+        ```python
+        HardwareManager.ThorCam
+        HardwareManager.Dhyana
+        HardwareManager.cameras[0]
+        ```
+        
+        """
+
         cams = []
         for camera_config in self.yaml.get("cameras"):
             camera_id = camera_config.get("id")
@@ -428,6 +455,7 @@ class HardwareManager:
         return core
 
 
+    @staticmethod
     def get_property_object(core : CMMCorePlus, device_id: str, property_id: str):
         return core.getPropertyObject(device_id, property_id)
     
