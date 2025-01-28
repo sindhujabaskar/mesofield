@@ -20,20 +20,20 @@ logging.basicConfig(filename='engine.log', level=logging.INFO,
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from mesofield.io import SerialWorker
+    from mesofield.config import ExperimentConfig
     from pymmcore_plus import CMMCorePlus
 
 class MesoEngine(MDAEngine):
     def __init__(self, mmc, use_hardware_sequencing: bool = True) -> None:
         super().__init__(mmc)
-        self._mmc = mmc
+        self._mmc: CMMCorePlus = mmc
         self.use_hardware_sequencing = use_hardware_sequencing
-        self._config = None
-        self._encoder: SerialWorker = None
         self._wheel_data = None
         # TODO: adder triggerable parameter 
+        
     def set_config(self, cfg) -> None:
-        self._config = cfg
-        self._encoder = cfg.encoder
+        self._config: ExperimentConfig = cfg
+        self._encoder: SerialWorker = cfg.encoder
     
     def setup_sequence(self, sequence: useq.MDASequence) -> SummaryMetaV1 | None:
         """Perform setup required before the sequence is executed."""
@@ -123,16 +123,14 @@ class MesoEngine(MDAEngine):
 class PupilEngine(MDAEngine):
     def __init__(self, mmc, use_hardware_sequencing: bool = True) -> None:
         super().__init__(mmc)
-        self._mmc = mmc
+        self._mmc: CMMCorePlus = mmc
         self.use_hardware_sequencing = use_hardware_sequencing
-        self._config = None
-        self._encoder: SerialWorker = None
         self._wheel_data = None
         # TODO: add triggerable parameter
         
     def set_config(self, cfg) -> None:
-        self._config = cfg
-        self._encoder = cfg.encoder
+        self._config: ExperimentConfig = cfg
+        self._encoder: SerialWorker = cfg.encoder
         
     def exec_sequenced_event(self, event: 'SequencedEvent') -> Iterable['PImagePayload']:
         """Execute a sequenced (triggered) event and return the image data.
