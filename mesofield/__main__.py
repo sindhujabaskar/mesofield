@@ -18,6 +18,8 @@ package_logger.setLevel(logging.CRITICAL)
 # Disable debugger warning about the use of frozen modules
 os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
 
+# Disable ipykernal logger
+logging.getLogger("ipykernel.inprocess.ipkernel").setLevel(logging.WARNING)
 
 
 def launch(params):
@@ -52,7 +54,7 @@ def main():
 
     # Subcommand: launch
     parser_launch = subparsers.add_parser('launch', help='Launch the mesofield acquisition interface')
-    parser_launch.add_argument('--params', default='dev.yaml',
+    parser_launch.add_argument('--params', default='hardware.yaml',
                                help='Path to the config file')
 
     # Subcommand: controller
