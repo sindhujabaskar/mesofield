@@ -8,12 +8,31 @@ from PyQt6.QtCore import pyqtSignal, QThread
 from mesofield.io import DataManager
 
 class SerialWorker(QThread):
+    """
+    SerialWorker is a QThread subclass responsible for handling encoder data through two modes:
+    development mode (generating simulated data) or serial mode (reading a real serial port).
+
+    Signals:
+    
+        1. `serialDataReceived` (pyqtSignal(int)): Emits each time a new encoder reading is captured.
+        2. `serialStreamStarted` (pyqtSignal()): Emits when the streaming thread starts running.
+        3. `serialStreamStopped` (pyqtSignal()): Emits when the streaming thread stops running.
+        4. `serialSpeedUpdated` (pyqtSignal(float, float)): Emits the elapsed time and current speed.
+    
+    Core Methods:
+    
+        `start()`: Initiates the thread and emits serialStreamStarted.
+        `stop()`: Requests the thread interruption, waits for it, and emits serialStreamStopped.
+        `get_data()`: Returns a DataFrame containing stored encoder readings, time, and computed speeds.
+        `process_data(position_change)`: Updates and stores the computed speed using the encoder clicks.
+        `calculate_speed(delta_clicks, delta_time)`: Performs speed calculation in meters/second.
+    """
     
     # ===================== PyQt Signals ===================== #
-    serialDataReceived = pyqtSignal(int)
-    serialStreamStarted = pyqtSignal()
-    serialStreamStopped = pyqtSignal()
-    serialSpeedUpdated = pyqtSignal(float, float)
+    serialDataReceived = pyqtSignal(int) # Emits each time a new encoder reading is captured
+    serialStreamStarted = pyqtSignal() # Emits when the streaming thread starts running
+    serialStreamStopped = pyqtSignal() # Emits when the streaming thread stops running
+    serialSpeedUpdated = pyqtSignal(float, float) # Emits the elapsed time (float) and current speed (float)
     # ======================================================== #
 
     def __init__(self, 
@@ -36,6 +55,7 @@ class SerialWorker(QThread):
 
         self.init_data()
 
+
     def init_data(self):
         self.stored_data = []
         self.times = []
@@ -43,9 +63,17 @@ class SerialWorker(QThread):
         self.clicks = []
         self.start_time = None
 
+
     def start(self) -> None:
         self.serialStreamStarted.emit()
         return super().start()
+    
+    
+    def stop(self):
+        self.requestInterruption()
+        self.wait()
+        self.serialStreamStopped.emit()
+
 
     def run(self):
         self.init_data()
@@ -57,11 +85,44 @@ class SerialWorker(QThread):
                 self.run_serial_mode()
         finally:
             print("Encoder Stream stopped.")
+            
+            
+    def run_development_mode(self):
+        while not self.isInterruptionRequested():
+            try:
+                # Simulate receiving random encoder clicks
+                clicks = random.randint(1, 10)  # Simulating random click values
+                
+                # Emit signals, store data, and push to the queue
+                self.stored_data.append(clicks)  # Store data for later retrieval
+                self.serialDataReceived.emit(clicks)  # Emit PyQt signal for real-time plotting
+                
+                # Optionally, simulate processing the data for speed calculation
+                self.process_data(clicks)
+            except Exception as e:
+                print(f"Exception in DevelopmentSerialWorker: {e}")
+                self.requestInterruption()
+            self.msleep(self.sample_interval_ms)  # Sleep for sample interval to reduce CPU usage
+
 
     def run_serial_mode(self):
+        """
+        Runs a continuous loop to read integer data from the configured serial port. 
+        Emits raw encoder clicks and send them to processed_data() method.
+
+        Emits:
+        
+        - serialDataReceived (pyqtSignal(int)): Emits each time a new encoder reading is captured.
+        - serialStreamStopped (pyqtSignal()): Emits when the streaming thread stops running.
+    
+        Raises:
+        
+            `serial.SerialException`: If there is an issue opening or reading from the serial port.
+            `ValueError`: If non-integer values are encountered while reading data.
+        """
+        
         try:
             self.arduino = serial.Serial(self.serial_port, self.baud_rate, timeout=0.1)
-            #self.arduino.flushInput()  # Flush any existing input
             print("Serial port opened.")
         except serial.SerialException as e:
             print(f"Serial connection error: {e}")
@@ -89,48 +150,7 @@ class SerialWorker(QThread):
                 except Exception as e:
                     print(f"Exception while closing serial port: {e}")
 
-    def run_development_mode(self):
-        while not self.isInterruptionRequested():
-            try:
-                # Simulate receiving random encoder clicks
-                clicks = random.randint(1, 10)  # Simulating random click values
-                
-                # Emit signals, store data, and push to the queue
-                self.stored_data.append(clicks)  # Store data for later retrieval
-                self.serialDataReceived.emit(clicks)  # Emit PyQt signal for real-time plotting
-                
-                # Optionally, simulate processing the data for speed calculation
-                self.process_data(clicks)
-            except Exception as e:
-                print(f"Exception in DevelopmentSerialWorker: {e}")
-                self.requestInterruption()
-            self.msleep(self.sample_interval_ms)  # Sleep for sample interval to reduce CPU usage
 
-    def stop(self):
-        self.requestInterruption()
-        self.wait()
-        self.serialStreamStopped.emit()
-        
-    def get_data(self):
-        import pandas as pd
-
-        clicks = self.clicks
-        times = self.times
-        speeds = self.speeds
-        data = {
-            'Clicks': clicks,
-            'Time': times,
-            'Speed': speeds
-        }
-        encoder_df = pd.DataFrame(data)
-        return encoder_df
-    
-    def clear_data(self):
-        self.stored_data = []
-        self.times = []
-        self.speeds = []
-        self.start_time = time.time()
-    
     def process_data(self, position_change):
         try:
             # Use fixed delta_time based on sample interval
@@ -145,13 +165,15 @@ class SerialWorker(QThread):
             self.speeds.append(speed)
             self.clicks.append(position_change)
 
-            # Optionally update GUI label or emit a signal for speed update
+            # Emit a signal for speed update
             self.serialSpeedUpdated.emit((current_time - self.start_time), speed)
         except Exception as e:
             print(f"Exception in processData: {e}")
 
+
     def calculate_speed(self, delta_clicks, delta_time):
-        '''Calculates speed of a wheel with diameter_mm in meters/second'''
+        """Calculates speed of a wheel with diameter_mm in meters/second
+        """
         
         reverse = 1  # Placeholder for direction configuration
         diameter_m = self.diameter_mm / 1000.0 #convert millimeters to meters
@@ -159,6 +181,29 @@ class SerialWorker(QThread):
         distance = reverse * rotations * (math.pi * diameter_m)  # Circumference * rotations
         speed = distance / delta_time
         return speed
+    
+        
+    def get_data(self):
+        from pandas import DataFrame
+
+        clicks = self.clicks
+        times = self.times
+        speeds = self.speeds
+        data = {
+            'Clicks': clicks,
+            'Time': times,
+            'Speed': speeds
+        }
+        encoder_df = DataFrame(data)
+        return encoder_df
+    
+    
+    def clear_data(self):
+        self.stored_data = []
+        self.times = []
+        self.speeds = []
+        self.start_time = time.time()
+    
 
     def __repr__(self):
         class_name = self.__class__.__name__
