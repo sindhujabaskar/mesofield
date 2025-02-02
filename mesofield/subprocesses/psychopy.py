@@ -1,6 +1,10 @@
 from PyQt6.QtCore import QProcess
 
-def launch(config, parent=None):
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from mesofield.config import ExperimentConfig
+
+def launch(config: 'ExperimentConfig', parent=None):
     """Launches a PsychoPy experiment as a subprocess with the given ExperimentConfig parameters."""
     # Build the command arguments
     args = [
@@ -9,7 +13,8 @@ def launch(config, parent=None):
         f'{config.subject}',
         f'{config.session}',
         f'{config.save_dir}',
-        f'{config.num_trials}'
+        f'{config.num_trials}',
+        f'{config.psychopy_save_path}'
     ]
     
     # Create and start the QProcess

@@ -5,7 +5,7 @@ import pandas as pd
 import os
 import useq
 import warnings
-
+import datetime
 import yaml
 from pymmcore_plus import CMMCorePlus
 
@@ -169,6 +169,20 @@ class ExperimentConfig:
         return os.path.join(self._save_dir, self.psychopy_filename)
     
     @property
+    def psychopy_save_path(self) -> str:
+        return os.path.join(self._save_dir, f"data/sub-{self.subject}/ses-{self.session}/beh/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_sub-{self.subject}_ses-{self.session}_task-{self.task}_psychopy")
+    
+    @property
+    def psychopy_parameters(self) -> dict:
+        return {
+            'subject': self.subject,
+            'session': self.session,
+            'save_dir': self.save_dir,
+            'num_trials': self.num_trials,
+            'filename': self.psychopy_save_path
+        }
+    
+    @property
     def led_pattern(self) -> list[str]:
         return self._parameters.get('led_pattern', ['4', '4', '2', '2'])
     
@@ -194,7 +208,6 @@ class ExperimentConfig:
         Output:
             C:/save_dir/data/sub-id/ses-id/func/20250110_123456_sub-001_ses-01_task-example_images.jpg
         """
-        import datetime 
         file = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_sub-{self.subject}_ses-{self.session}_task-{self.task}_{suffix}.{extension}"
 
         if bids_type is None:
@@ -231,7 +244,7 @@ class ExperimentConfig:
         """ Create a DataFrame from the ExperimentConfig properties 
         """
         properties = [prop for prop in dir(self.__class__) if isinstance(getattr(self.__class__, prop), property)]
-        exclude_properties = {'dataframe', 'parameters', 'json_path', "_cores"}
+        exclude_properties = {'dataframe', 'parameters', 'json_path', "_cores", "meso_sequence", "pupil_sequence", "psychopy_path", "encoder"}
         data = {prop: getattr(self, prop) for prop in properties if prop not in exclude_properties}
         return pd.DataFrame(data.items(), columns=['Parameter', 'Value'])
                 
