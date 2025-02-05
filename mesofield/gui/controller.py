@@ -79,12 +79,12 @@ class ConfigController(QWidget):
     recordStarted = pyqtSignal()
     # ------------------------------------------------------------------------------------- #
     
-    def __init__(self, cfg):
+    def __init__(self, cfg: 'ExperimentConfig'):
         super().__init__()
         self.mmcores = cfg._cores
         # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
 
-        self.config: ExperimentConfig = cfg
+        self.config = cfg
         self._mmc1: CMMCorePlus = self.mmcores[0]
         self._mmc2: CMMCorePlus = self.mmcores[1]
 
