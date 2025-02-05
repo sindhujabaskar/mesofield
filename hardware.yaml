@@ -1,5 +1,7 @@
 memory_buffer_size: 10000
 viewer_type: "static"
+blue_led_power_mw: "8.2"
+violet_led_power_mw: "4.2"
 
 encoder:
   type: "wheel"
@@ -21,6 +23,7 @@ cameras:
         Output Trigger Port: 2
         Gain: "HDR"
         fps: 49 # IMPORTANT: This is validated externally and is a value used merely to calculate experiment duration and frames to capture
+        viewer_type: "interactive"
       Arduino-Shutter: 
         OnOff: "1"
       Arduino-Switch: 
@@ -38,6 +41,8 @@ cameras:
         Exposure: 20
         fps: 30 # IMPORTANT: This is validated externally and is a value used merely to calculate experiment duration and frames to capture
         ROI: [440, 305, 509, 509]
+        viewer_type: "static"
+
 
 
   # - id: "arducam"

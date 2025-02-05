@@ -342,13 +342,14 @@ class HardwareManager:
     def __init__(self, config_file: str):
         self.yaml = self._load_hardware_from_yaml(config_file)
         self.cameras: tuple = ()
+        self._viewer = self.yaml['viewer_type']
         self._initialize_cameras()
         self._initialize_encoder()
 
     def __repr__(self):
         return (
             "<HardwareManager>\n"
-            f"  Cameras: {[cam.id for cam in self.cameras]}\n"
+            f"  Cameras: {[cam for cam in self.cameras]}\n"
             f"  Encoder: {self.encoder}\n"
             f"  Config: {self.yaml}\n"
             f"  loaded_keys={list(self.params.keys())}\n"
@@ -419,7 +420,7 @@ class HardwareManager:
             camera_id = camera_config.get("id")
             backend = camera_config.get("backend")
             if backend == "micromanager":
-                core = self.get_core_object(
+                core = self._get_core_object(
                     camera_config.get("micromanager_path"),
                     camera_config.get("configuration_path", None),
                 )
@@ -433,6 +434,8 @@ class HardwareManager:
                             elif property_id == 'fps':
                                 print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
                                 setattr(camera_object, 'fps', value)
+                            elif property_id == 'viewer_type':
+                                setattr(self, 'viewer', value)
                             else:
                                 print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
                                 core.setProperty(device_id, property_id, value)
@@ -459,7 +462,7 @@ class HardwareManager:
             self.cameras = tuple(cams)
                 
     
-    def get_core_object(self, mm_path, mm_cfg_path):
+    def _get_core_object(self, mm_path, mm_cfg_path):
         core = CMMCorePlus(mm_path)
         if mm_path and mm_cfg_path is not None:
             core.loadSystemConfiguration(mm_cfg_path)
@@ -473,7 +476,7 @@ class HardwareManager:
         return core.getPropertyObject(device_id, property_id)
     
     
-    def configure_engines(self, cfg):
+    def _configure_engines(self, cfg):
         """ If using micromanager cameras, configure the engines <camera.core.mda.engine.set_config(cfg)>
         """
         for cam in self.cameras:
