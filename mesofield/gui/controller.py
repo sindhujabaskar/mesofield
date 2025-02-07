@@ -350,12 +350,11 @@ class ConfigController(QWidget):
         """
         Open a dialog to get a note from the user and save it to the ExperimentConfig.notes list.
         """
+        time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         text, ok = QInputDialog.getText(self, 'Add Note', 'Enter your note:')
         if ok and text:
-            time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             note_with_timestamp = f"{time}: {text}"
             self.config.notes.append(note_with_timestamp)
-            print("Note added to configuration.")
 
     # ----------------------------------------------------------------------------------------------- #
 
