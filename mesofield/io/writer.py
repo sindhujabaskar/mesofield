@@ -51,7 +51,7 @@ from pathlib import Path
 import json
 
 IMAGEJ_AXIS_ORDER = "tzcyxs"
-FRAME_MD_FILENAME = "metadata.json"
+FRAME_MD_FILENAME = "_frame_metadata.json"
 
 class CustomWriter(_5DWriterBase[np.memmap]):
     """Custom Override of Pymmcore-Plus MDA handler that writes to a 5D OME-TIFF file.

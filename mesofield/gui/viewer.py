@@ -4,7 +4,7 @@ import numpy as np
 from pymmcore_plus import CMMCorePlus
 from qtpy.QtCore import Qt, QTimer
 from qtpy.QtGui import QImage, QPixmap
-from qtpy.QtWidgets import QHBoxLayout, QLabel, QWidget
+from qtpy.QtWidgets import QHBoxLayout, QLabel, QWidget, QSizePolicy
 from threading import Lock
 
 class ImagePreview(QWidget):
@@ -155,9 +155,10 @@ class ImagePreview(QWidget):
 
         # Set up image label
         self.image_label = QLabel()
+        self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setMinimumSize(512, 512)
-        self.image_label.setScaledContents(True)  # Allow image scaling
+        self.image_label.setScaledContents(False)  # Keep aspect ratio
 
         # Set up layout
         self.setLayout(QHBoxLayout())
@@ -244,6 +245,7 @@ class ImagePreview(QWidget):
         qimage = self._convert_to_qimage(img)
         if qimage is not None:
             pixmap = QPixmap.fromImage(qimage)
+            pixmap = pixmap.scaled(self.image_label.width(), self.image_label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self.image_label.setPixmap(pixmap)
 
     def _update_image(self, img: np.ndarray) -> None:
@@ -330,6 +332,8 @@ from threading import Lock
 from contextlib import suppress
 from typing import Tuple, Union, Literal
 from pymmcore_plus import CMMCorePlus
+
+pg.setConfigOptions(imageAxisOrder='row-major', useOpenGL=True)
 
 class InteractivePreview(pg.ImageView):
     def __init__(self, parent=None, mmcore=None, use_with_mda=True, image_payload=None):

@@ -64,7 +64,7 @@ class SerialWorker(QThread):
         self.start_time = None
 
 
-    def start(self) -> None:
+    def start(self):
         self.serialStreamStarted.emit()
         return super().start()
     

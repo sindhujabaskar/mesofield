@@ -123,7 +123,7 @@ class MesoEngine(MDAEngine):
 class PupilEngine(MDAEngine):
     def __init__(self, mmc, use_hardware_sequencing: bool = True) -> None:
         super().__init__(mmc)
-        self._mmc = mmc
+        self._mmc: CMMCorePlus = mmc
         self.use_hardware_sequencing = use_hardware_sequencing
         self._config = None
         self._wheel_data = None

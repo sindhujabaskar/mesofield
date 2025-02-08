@@ -5,7 +5,7 @@ import pandas as pd
 import os
 import useq
 import warnings
-
+import datetime
 import yaml
 from pymmcore_plus import CMMCorePlus
 
@@ -169,6 +169,20 @@ class ExperimentConfig:
         return os.path.join(self._save_dir, self.psychopy_filename)
     
     @property
+    def psychopy_save_path(self) -> str:
+        return os.path.join(self._save_dir, f"data/sub-{self.subject}/ses-{self.session}/beh/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_sub-{self.subject}_ses-{self.session}_task-{self.task}_psychopy")
+    
+    @property
+    def psychopy_parameters(self) -> dict:
+        return {
+            'subject': self.subject,
+            'session': self.session,
+            'save_dir': self.save_dir,
+            'num_trials': self.num_trials,
+            'filename': self.psychopy_save_path
+        }
+    
+    @property
     def led_pattern(self) -> list[str]:
         return self._parameters.get('led_pattern', ['4', '4', '2', '2'])
     
@@ -194,7 +208,6 @@ class ExperimentConfig:
         Output:
             C:/save_dir/data/sub-id/ses-id/func/20250110_123456_sub-001_ses-01_task-example_images.jpg
         """
-        import datetime 
         file = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_sub-{self.subject}_ses-{self.session}_task-{self.task}_{suffix}.{extension}"
 
         if bids_type is None:
@@ -231,7 +244,7 @@ class ExperimentConfig:
         """ Create a DataFrame from the ExperimentConfig properties 
         """
         properties = [prop for prop in dir(self.__class__) if isinstance(getattr(self.__class__, prop), property)]
-        exclude_properties = {'dataframe', 'parameters', 'json_path', "_cores"}
+        exclude_properties = {'dataframe', 'parameters', 'json_path', "_cores", "meso_sequence", "pupil_sequence", "psychopy_path", "encoder"}
         data = {prop: getattr(self, prop) for prop in properties if prop not in exclude_properties}
         return pd.DataFrame(data.items(), columns=['Parameter', 'Value'])
                 
@@ -329,13 +342,14 @@ class HardwareManager:
     def __init__(self, config_file: str):
         self.yaml = self._load_hardware_from_yaml(config_file)
         self.cameras: tuple = ()
+        self._viewer = self.yaml['viewer_type']
         self._initialize_cameras()
         self._initialize_encoder()
 
     def __repr__(self):
         return (
             "<HardwareManager>\n"
-            f"  Cameras: {[cam.id for cam in self.cameras]}\n"
+            f"  Cameras: {[cam for cam in self.cameras]}\n"
             f"  Encoder: {self.encoder}\n"
             f"  Config: {self.yaml}\n"
             f"  loaded_keys={list(self.params.keys())}\n"
@@ -406,7 +420,7 @@ class HardwareManager:
             camera_id = camera_config.get("id")
             backend = camera_config.get("backend")
             if backend == "micromanager":
-                core = self.get_core_object(
+                core = self._get_core_object(
                     camera_config.get("micromanager_path"),
                     camera_config.get("configuration_path", None),
                 )
@@ -420,6 +434,8 @@ class HardwareManager:
                             elif property_id == 'fps':
                                 print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
                                 setattr(camera_object, 'fps', value)
+                            elif property_id == 'viewer_type':
+                                setattr(self, 'viewer', value)
                             else:
                                 print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
                                 core.setProperty(device_id, property_id, value)
@@ -446,7 +462,7 @@ class HardwareManager:
             self.cameras = tuple(cams)
                 
     
-    def get_core_object(self, mm_path, mm_cfg_path):
+    def _get_core_object(self, mm_path, mm_cfg_path):
         core = CMMCorePlus(mm_path)
         if mm_path and mm_cfg_path is not None:
             core.loadSystemConfiguration(mm_cfg_path)
@@ -460,7 +476,7 @@ class HardwareManager:
         return core.getPropertyObject(device_id, property_id)
     
     
-    def configure_engines(self, cfg):
+    def _configure_engines(self, cfg):
         """ If using micromanager cameras, configure the engines <camera.core.mda.engine.set_config(cfg)>
         """
         for cam in self.cameras:

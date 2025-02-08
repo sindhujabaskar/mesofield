@@ -1,85 +1,70 @@
-"""CLI Interface entry point for mesofield python package"""
-
 import os
 import logging
-import argparse
 
+import click
 from PyQt6.QtWidgets import QApplication
-
 from mesofield.gui.maingui import MainWindow
 from mesofield.config import ExperimentConfig
 
 # Disable pymmcore-plus logger
 package_logger = logging.getLogger('pymmcore-plus')
-
-# Set the logging level to CRITICAL to suppress lower-level logs
 package_logger.setLevel(logging.CRITICAL)
 
 # Disable debugger warning about the use of frozen modules
 os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
 
-# Disable ipykernal logger
+# Disable ipykernel logger
 logging.getLogger("ipykernel.inprocess.ipkernel").setLevel(logging.WARNING)
 
-
-def launch(params):
+def launch_mesofield(params):
     """Launch the mesofield acquisition interface."""
     print('Launching mesofield acquisition interface...')
     app = QApplication([])
     config = ExperimentConfig(params)
-    config.hardware.configure_engines(config)
-    print(config.hardware.cameras[0])
+    config.hardware._configure_engines(config)
     mesofield = MainWindow(config)
     mesofield.show()
     app.exec()
 
 def controller():
     """Launch the mesofield controller."""
-    from mesofield.gui.controller import Controller
+    import  mesofield.gui.controller
     app = QApplication([])
     c = Controller()
     c.show()
     app.exec()
 
-def test_mda(frames):
-    """Run a test of the mesofield Multi-Dimensional Acquisition (MDA)."""
-    from mesofield.startup import test_mda
-
 def run_mda_command():
     """Run the Multi-Dimensional Acquisition (MDA) without the GUI."""
 
-def main():
-    parser = argparse.ArgumentParser(description="mesofields Command Line Interface")
-    subparsers = parser.add_subparsers(dest='command', help='Available subcommands')
+def test_psychopy():
+    import tests.test_psychopy as test_psychopy
+    import sys
+    app = QApplication(sys.argv)
+    gui = test_psychopy.PsychopyGui()
+    gui.show()
+    sys.exit(app.exec())
 
-    # Subcommand: launch
-    parser_launch = subparsers.add_parser('launch', help='Launch the mesofield acquisition interface')
-    parser_launch.add_argument('--params', default='hardware.yaml',
-                               help='Path to the config file')
+@click.group()
+def cli():
+    """mesofields Command Line Interface"""
 
-    # Subcommand: controller
-    parser_controller = subparsers.add_parser('controller', help='Launch the mesofield controller')
+@cli.command()
+@click.option('--params', default='hardware.yaml', help='Path to the config file')
+def launch(params):
+    launch_mesofield(params)
 
-    # Subcommand: test_mda
-    parser_test_mda = subparsers.add_parser('test_mda', help='Run a test MDA')
-    parser_test_mda.add_argument('--frames', type=int, default=100,
-                                 help='Number of frames for the MDA test')
+@cli.command()
+def controller_cmd():
+    controller()
 
-    # Subcommand: run_mda
-    subparsers.add_parser('run_mda', help='Run MDA without the GUI')
+@cli.command()
+def psychopy():
+    test_psychopy()
 
-    args = parser.parse_args()
-
-    if args.command == 'launch':
-        launch(args.params)
-    elif args.command == 'controller':
-        controller()
-    elif args.command == 'test_mda':
-        test_mda(args.frames)
-    elif args.command == 'run_mda':
-        run_mda_command()
-    else:
-        parser.print_help()
+@cli.command()
+def run_mda():
+    run_mda_command()
 
 if __name__ == "__main__":
-    main()
+    cli()

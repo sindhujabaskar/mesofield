@@ -87,8 +87,9 @@ class MDA(QWidget):
         """
         super().__init__()
         # get the CMMCore instance and load the default config
-        self.mmcores: tuple[CMMCorePlus, CMMCorePlus] = config._cores
-
+        self.cameras = config.hardware.cameras
+        self.mmcores = tuple(cam.core for cam in self.cameras)
+        self._viewer_type = config.hardware._viewer
         # instantiate the MDAWidget
         #self.mda = MDAWidget(mmcore=self.mmcores[0])
         # ----------------------------------Auto-set MDASequence and save_info----------------------------------#
@@ -99,7 +100,7 @@ class MDA(QWidget):
 
         live_viewer = QGroupBox()
         live_viewer.setLayout(QVBoxLayout())
-        live_viewer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        live_viewer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         buttons = QGroupBox()
         buttons.setLayout(QHBoxLayout())
 
@@ -108,7 +109,10 @@ class MDA(QWidget):
                 '''Single Core Layout'''
             
                 self.mmc: CMMCorePlus = self.mmcores[0]
-                self.preview = InteractivePreview(mmcore=self.mmc)#, parent=self.mda)
+                if self._viewer_type == "static":
+                    self.preview = ImagePreview(mmcore=self.mmc)
+                elif self._viewer_type == "interactive":
+                    self.preview = InteractivePreview(mmcore=self.mmc)#, parent=self.mda)
                 self.snap_button = SnapButton(mmcore=self.mmc)
                 self.live_button = LiveButton(mmcore=self.mmc)
                 self.exposure = ExposureWidget(mmcore=self.mmc)
@@ -132,9 +136,12 @@ class MDA(QWidget):
 
             elif len(self.mmcores) == 2:
                 '''Dual Core Layout'''
-                
-                self.preview1 = ImagePreview(mmcore=self.mmcores[0])#, parent=self.mda)
-                self.preview2 = ImagePreview(mmcore=self.mmcores[1])#, parent=self.mda)
+                if self._viewer_type == "static":
+                    self.preview1 = ImagePreview(mmcore=self.mmcores[0])#, parent=self.mda)
+                    self.preview2 = ImagePreview(mmcore=self.mmcores[1])#, parent=self.mda)
+                elif self._viewer_type == "interactive":
+                    self.preview1 = InteractivePreview(mmcore=self.mmcores[0])#, parent=self.mda)
+                    self.preview2 = ImagePreview(mmcore=self.mmcores[1])
                 snap_button1 = SnapButton(mmcore=self.mmcores[0])
                 live_button1 = LiveButton(mmcore=self.mmcores[0])
                 snap_button2 = SnapButton(mmcore=self.mmcores[1])
@@ -147,8 +154,9 @@ class MDA(QWidget):
                 #-------------------- Core 1 Viewer ---------------------#
                 core1_layout = QVBoxLayout()
 
-                buttons1 = QGroupBox(title=f"{self.mmcores[0].getCameraDevice()}") # f-string is needed to avoid TypeError: unable to convert a Python 'builtin_function_or_method' object to a C++ 'QString' instance
+                buttons1 = QGroupBox(title=f"{self.mmcores[0].getCameraDevice()}")
                 buttons1.setLayout(QHBoxLayout())
+                buttons1.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 buttons1.layout().addWidget(snap_button1)
                 buttons1.layout().addWidget(live_button1)
                 core1_layout.addWidget(buttons1)
@@ -159,6 +167,7 @@ class MDA(QWidget):
 
                 buttons2 = QGroupBox(title=f"{self.mmcores[1].getCameraDevice()}") # f-string is needed to avoid TypeError: unable to convert a Python 'builtin_function_or_method' object to a C++ 'QString' instance
                 buttons2.setLayout(QHBoxLayout())
+                buttons2.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 buttons2.layout().addWidget(snap_button2)
                 buttons2.layout().addWidget(live_button2)
                 core2_layout.addWidget(buttons2)
