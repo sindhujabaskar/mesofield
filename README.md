@@ -4,13 +4,15 @@ This is a PyQt application that is designed to interface with scientific hardwar
 
 The core of the application is the `ExperimentConfig` class (`mesofield.config.ExperimentConfig`) and the corresponding `ConfigController` widget (`mesofield.gui.widgets.ConfigController`)
 
-Currently, `ExperimentConfig` loads hardware configurations via the `mesofield.startup.Startup` dataclass which loads by default `params.json` in the module directory
+`ExperimentConfig` loads hardware configurations via the `mesofield.config.HardwareManager` dataclass which loads a `hardware.yaml` file in the module directory
 
-The `ConfigController` loads parameters to the `ExperimentConfig` instance by passing a JSON file to the `ExperimentConfig.load_parameters()` method.
+All hardware and GUI components inherit the `ExperimentConfig` providing global state access to parameters defining filename, directories, and experimental settings.
 
-A single instance of the `ExperimentConfig` is passed for reference to each component of the application. 
+The `ConfigController` loads additional parameters to the `ExperimentConfig` instance by passing a JSON file path to the `ExperimentConfig.load_parameters()` method.
 
 NOTE: This has only been tested on Windows 10/11. Hardware control features rely on pymmcore-plus and an installation of MicroManager with specific device drivers. 
+
+The GUI components include live views for cameras (with optional pyqtgraph ImageView), encoder velocity pyqtgraphics, buttons for hardware control, and an iPython terminal for access to the backend
 
 # Setting Up Mesofield in Visual Studio Code
 
@@ -53,7 +55,7 @@ Optionally, you can install directly from [setup.py]:
 pip install .
 ```
 
-Notable dependencies include: [pymmcore-plus](https://pymmcore-plus.github.io/pymmcore-plus/), [pymmcore-widgets](https://pymmcore-plus.github.io/pymmcore-widgets/) (for the MDAWidget), [useq](https://pymmcore-plus.github.io/useq-schema/), [PyQt](https://doc.qt.io/qtforpython-6/), [pyqtgraph](https://pyqtgraph.readthedocs.io/en/latest/), [pyserial](https://pyserial.readthedocs.io/en/latest/), pandas, numpy, matplotlib
+Notable dependencies include: [pymmcore-plus](https://pymmcore-plus.github.io/pymmcore-plus/), [pymmcore-widgets](https://pymmcore-plus.github.io/pymmcore-widgets/) (for the MDAWidget), [useq](https://pymmcore-plus.github.io/useq-schema/), [PyQt](https://doc.qt.io/qtforpython-6/), [pyqtgraph](https://pyqtgraph.readthedocs.io/en/latest/), [pyserial](https://pyserial.readthedocs.io/en/latest/), pandas, numpy, matplotlib, and OpenCV (if using Arducam or other OpenCV compatible camera)
 
 ## 4. Launch Mesofield
 
