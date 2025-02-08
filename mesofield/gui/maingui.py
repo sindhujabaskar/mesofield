@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from mesofield.config import ExperimentConfig
 
 class MainWindow(QMainWindow):
-    def __init__(self, cfg):
+    def __init__(self, cfg: 'ExperimentConfig'):
         super().__init__()
         self.setWindowTitle("Mesofield")
         self.config = cfg
