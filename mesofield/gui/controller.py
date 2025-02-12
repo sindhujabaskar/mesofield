@@ -91,7 +91,7 @@ class ConfigController(QWidget):
         self.psychopy_process = None
 
         # Create main layout
-        self.layout = QVBoxLayout(self)
+        layout = QVBoxLayout(self)
         self.setFixedWidth(500)
 
         # ==================================== GUI Widgets ===================================== #
@@ -107,7 +107,7 @@ class ConfigController(QWidget):
         dir_layout.addWidget(self.directory_line_edit)
         dir_layout.addWidget(self.directory_button)
 
-        self.layout.addLayout(dir_layout)
+        layout.addLayout(dir_layout)
 
         # 2. Dropdown Widget for JSON configuration files
         self.json_dropdown_label = QLabel('Select JSON Config:')
@@ -117,34 +117,34 @@ class ConfigController(QWidget):
         json_layout.addWidget(self.json_dropdown_label)
         json_layout.addWidget(self.json_dropdown)
 
-        self.layout.addLayout(json_layout)
+        layout.addLayout(json_layout)
 
         # 3. Table widget to display the configuration parameters loaded from the JSON
-        self.layout.addWidget(QLabel('Experiment Config:'))
+        layout.addWidget(QLabel('Experiment Config:'))
         self.config_table = QTableWidget()
         self.config_table.setEditTriggers(QTableWidget.AllEditTriggers)
         self.config_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.layout.addWidget(self.config_table)
+        layout.addWidget(self.config_table)
 
         # 4. Record button to start the MDA sequence
         self.record_button = QPushButton('Record')
-        self.layout.addWidget(self.record_button)
+        layout.addWidget(self.record_button)
         
         # 5. Test LED button to test the LED pattern
         self.test_led_button = QPushButton("Test LED")
-        self.layout.addWidget(self.test_led_button)
+        layout.addWidget(self.test_led_button)
         
         # 6. Stop LED button to stop the LED pattern
         self.stop_led_button = QPushButton("Stop LED")
-        self.layout.addWidget(self.stop_led_button)
+        layout.addWidget(self.stop_led_button)
         
         # 7. Add Note button to add a note to the configuration
         self.add_note_button = QPushButton("Add Note")
-        self.layout.addWidget(self.add_note_button)
+        layout.addWidget(self.add_note_button)
 
         # 7. Add a snap image button for self._mmc1.snap() 
         self.snap_button = QPushButton("Snap Image")
-        self.layout.addWidget(self.snap_button)
+        layout.addWidget(self.snap_button)
 
         # ------------------------------------------------------------------------------------- #
 
@@ -214,8 +214,7 @@ class ConfigController(QWidget):
         thread2 = threading.Thread(target=self._mmc2.run_mda, args=(self.config.pupil_sequence,), kwargs={'output': CustomWriter(self.config.pupil_file_path)})
 
         # Wait for spacebar press if start_on_trigger is True
-        wait_for_trigger = self.config.start_on_trigger
-        if wait_for_trigger == True:
+        if self.config.start_on_trigger == "True":
             self.launch_psychopy()
             self.show_popup()
         # Emit signal to notify other widgets

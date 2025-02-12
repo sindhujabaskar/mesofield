@@ -1,19 +1,26 @@
 import os
+import sys
 import json
+import warnings
+import yaml
+import datetime
+
 import pathlib
 import pandas as pd
-import os
-import useq
-import warnings
-import datetime
-import yaml
-from pymmcore_plus import CMMCorePlus
 
-from mesofield.engines import DevEngine, MesoEngine, PupilEngine
-from mesofield.io.encoder import SerialWorker
-from mesofield.io.arducam import VideoThread
-from mesofield.io import SerialWorker
-    
+try:
+    from pymmcore_plus import CMMCorePlus
+    import useq
+    from mesofield.engines import DevEngine, MesoEngine, PupilEngine
+    from mesofield.io.encoder import SerialWorker
+    from mesofield.io.arducam import VideoThread
+    from mesofield.io import SerialWorker
+except ImportError:
+    # These are not required for unpickling.
+    pass
+
+
+
 class ExperimentConfig:
     """## Generate and store parameters loaded from a JSON file. 
     
@@ -41,18 +48,19 @@ class ExperimentConfig:
         self._json_file_path = ''
         self._output_path = ''
         self._save_dir = ''
+        self.module_path = r'C:/dev/mesofield'
 
         self.hardware = HardwareManager(path)
         
-        self.notes: list = []
+        self.notes: list = []    
 
     @property
-    def _cores(self) -> tuple[CMMCorePlus, ...]:
+    def _cores(self):# -> tuple[CMMCorePlus, ...]:
         """Return the tuple of CMMCorePlus instances from the hardware cameras."""
         return tuple(cam.core for cam in self.hardware.cameras if hasattr(cam, 'core'))
 
     @property
-    def encoder(self) -> SerialWorker:
+    def encoder(self):# -> SerialWorker:
         return self.hardware.encoder
 
     @property
@@ -277,7 +285,7 @@ class ExperimentConfig:
                 print(f"Notes saved to {self.notes_file_path}")
         except Exception as e:
             print(f"Error saving notes: {e}")
-        
+            
 class ConfigLoader:
     def __init__(self, file_path: str):
         self.file_path = file_path
@@ -352,7 +360,7 @@ class HardwareManager:
             f"  Cameras: {[cam for cam in self.cameras]}\n"
             f"  Encoder: {self.encoder}\n"
             f"  Config: {self.yaml}\n"
-            f"  loaded_keys={list(self.params.keys())}\n"
+            #f"  loaded_keys={list(self.params.keys())}\n"
             "</HardwareManager>"
         )
         
