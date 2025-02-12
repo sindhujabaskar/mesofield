@@ -314,24 +314,13 @@ Requires:
 """
 
 VALID_BACKENDS = {"micromanager", "opencv"}
-   
+from dataclasses import dataclass
+@dataclass
+class Nidaq:
+    device_name: str
+    lines: str
+    io_type: str
 
-class Daq:
-    """
-    Represents an abstracted NI-DAQ device.
-    """
-
-    def __init__(self, config: dict):
-        self.config = config
-        self.type = config.get("type", "unknown")
-        self.port = config.get("port")
-
-
-    def __repr__(self):
-        return (
-            f"<Daq type='{self.type}' port='{self.port}' "
-            f"config={self.config}>"
-        )
 
 class HardwareManager:
     """
@@ -345,6 +334,7 @@ class HardwareManager:
         self._viewer = self.yaml['viewer_type']
         self._initialize_cameras()
         self._initialize_encoder()
+        self._initialize_daq()
 
     def __repr__(self):
         return (
@@ -371,6 +361,18 @@ class HardwareManager:
             
         return params
             
+
+    def _initialize_daq(self):
+        if self.yaml.get("nidaq"):
+            params = self.yaml.get("nidaq")
+            self.nidaq = Nidaq(
+                device_name=params.get('device_name'),
+                lines=params.get('lines'),
+                io_type=params.get('io_type')
+            )
+        else:
+            self.nidaq = None
+
             
     def _initialize_encoder(self):
         if self.yaml.get("encoder"):

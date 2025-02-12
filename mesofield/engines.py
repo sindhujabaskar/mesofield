@@ -12,7 +12,8 @@ if TYPE_CHECKING:
     
 from pymmcore_plus.metadata import SummaryMetaV1
 from pymmcore_plus.mda import MDAEngine
-
+import nidaqmx
+from nidaqmx.constants import LineGrouping
 import logging
 logging.basicConfig(filename='engine.log', level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -125,13 +126,13 @@ class PupilEngine(MDAEngine):
         super().__init__(mmc)
         self._mmc: CMMCorePlus = mmc
         self.use_hardware_sequencing = use_hardware_sequencing
-        self._config = None
         self._wheel_data = None
         # TODO: add triggerable parameter
         
-    def set_config(self, cfg) -> None:
-        self._config: ExperimentConfig = cfg
-        self._encoder: SerialWorker = cfg.encoder
+    def set_config(self, cfg: 'ExperimentConfig') -> None:
+        self._config = cfg
+        self._encoder = cfg.encoder
+        self._nidaq = cfg.hardware.nidaq
         
     def exec_sequenced_event(self, event: 'SequencedEvent') -> Iterable['PImagePayload']:
         """Execute a sequenced (triggered) event and return the image data.
@@ -147,6 +148,26 @@ class PupilEngine(MDAEngine):
         t0 = event.metadata.get("runner_t0") or time.perf_counter()
         event_t0_ms = (time.perf_counter() - t0) * 1000
         
+        if self._nidaq is not None:
+
+            if self._nidaq.io is "DO":
+                with nidaqmx.Task() as task:
+                    task.do_channels.add_do_chan(lines=self._nidaq.lines, 
+                                                 name_to_assign_to_lines="PupilEngine_Trigger",
+                                                 line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    task.start()
+                    task.write(True)
+                    task.stop()
+
+            elif self._nidaq.io is "DI":
+                with nidaqmx.Task() as task:
+                    task.di_channels.add_di_chan(lines=self._nidaq.lines, 
+                                                 name_to_assign_to_lines="PupilEngine_Trigger",
+                                                 line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    print(f"{task}: Waiting for trigger")
+                    while not task.read():
+                        pass
+
         # Start sequence
         # Note that the overload of startSequenceAcquisition that takes a camera
         # label does NOT automatically initialize a circular buffer.  So if this call
