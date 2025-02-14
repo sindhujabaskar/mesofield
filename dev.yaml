@@ -8,7 +8,12 @@ encoder:
   cpr: 2400
   diameter_mm: 80
   sample_interval_ms: 20
-  development_mode: False
+  development_mode: True
+
+nidaq:
+  device_name: "Dev1"
+  lines: "port2/line0"
+  io_type: "DO"
 
 cameras:
   - id: "dev"
@@ -20,7 +25,7 @@ cameras:
   - id: "dev"
     name: "devcam2"
     backend: "micromanager"
-    micromanager_path: "C:/Program Files/Micro-Manager-thor"
+    micromanager_path: "C:/Program Files/Micro-Manager-2.0"
 
 
 

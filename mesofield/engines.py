@@ -150,7 +150,7 @@ class PupilEngine(MDAEngine):
         
         if self._nidaq is not None:
 
-            if self._nidaq.io is "DO":
+            if self._nidaq.io == "DO":
                 with nidaqmx.Task() as task:
                     task.do_channels.add_do_chan(lines=self._nidaq.lines, 
                                                  name_to_assign_to_lines="PupilEngine_Trigger",
@@ -159,7 +159,7 @@ class PupilEngine(MDAEngine):
                     task.write(True)
                     task.stop()
 
-            elif self._nidaq.io is "DI":
+            elif self._nidaq.io == "DI":
                 with nidaqmx.Task() as task:
                     task.di_channels.add_di_chan(lines=self._nidaq.lines, 
                                                  name_to_assign_to_lines="PupilEngine_Trigger",
@@ -230,6 +230,14 @@ class DevEngine(MDAEngine):
         
     def set_config(self, cfg) -> None:
         self._config = cfg
+        self._encoder = cfg.encoder
+
+    def setup_sequence(self, sequence: useq.MDASequence) -> SummaryMetaV1 | None:
+        self.nidaq = sequence.metadata.get("device_name")
+        self.lines = sequence.metadata.get("lines")
+        self.io_type = sequence.metadata.get("io_type")
+        logging.info(f'{self.__str__()} setup_sequence loaded Nidaq: {self.nidaq} with lines {self.lines} of type: {self.io_type}')
+        return super().setup_sequence(sequence)
     
     def exec_sequenced_event(self, event: 'SequencedEvent') -> Iterable['PImagePayload']:
         """Execute a sequenced (triggered) event and return the image data.
@@ -244,6 +252,8 @@ class DevEngine(MDAEngine):
 
         t0 = event.metadata.get("runner_t0") or time.perf_counter()
         event_t0_ms = (time.perf_counter() - t0) * 1000
+
+
         # Start sequence
         # Note that the overload of startSequenceAcquisition that takes a camera
         # label does NOT automatically initialize a circular buffer.  So if this call
@@ -259,6 +269,30 @@ class DevEngine(MDAEngine):
         n_channels = self._mmc.getNumberOfCameraChannels()
         count = 0
         iter_events = product(event.events, range(n_channels))
+
+        #https://github.com/pymmcore-plus/useq-schema/issues/213 
+        if self.nidaq is not None and self.io_type == "DO":
+                with nidaqmx.Task() as task:
+                    task.do_channels.add_do_chan(lines=f"{self.nidaq}/{self.lines}", 
+                                                name_to_assign_to_lines="DevEngine_Trigger",
+                                                line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    task.start()
+                    task.write(True)
+                    logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
+                    task.stop()
+
+        elif self.nidaq is not None and self.io_type == "DI":
+                with nidaqmx.Task() as task:
+                    task.di_channels.add_di_chan(lines=f"{self.nidaq}/{self.lines}", 
+                                                name_to_assign_to_lines="DevEngine_Trigger",
+                                                line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.nidaq}/{self.lines} waiting for trigger')
+                    while not task.read():
+                        pass
+                    logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
+
+
+        
         # block until the sequence is done, popping images in the meantime
         while True:
             if self._mmc.isSequenceRunning():
@@ -295,4 +329,16 @@ class DevEngine(MDAEngine):
         self._wheel_data = self._encoder.get_data()
         self._config.save_wheel_encoder_data(self._wheel_data)
         self._config.save_configuration()
+
+        if self.nidaq is not None and self.io_type == "DO":
+                with nidaqmx.Task() as task:
+                    task.do_channels.add_do_chan(lines=f"{self.nidaq}/{self.lines}", 
+                                                name_to_assign_to_lines="DevEngine_Trigger",
+                                                line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    task.start()
+                    task.write(False)
+                    task.stop()
+                    logging.info(f'{self.__str__()}.teardown_sequence Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
+
+
         pass

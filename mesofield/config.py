@@ -315,11 +315,26 @@ Requires:
 
 VALID_BACKENDS = {"micromanager", "opencv"}
 from dataclasses import dataclass
+import nidaqmx
+import time
 @dataclass
 class Nidaq:
     device_name: str
     lines: str
     io_type: str
+
+    def test_connection(self):
+        print(f"Testing connection to NI-DAQ device: {self.device_name}")
+        try:
+            with nidaqmx.Task() as task:
+                task.do_channels.add_do_chan(f'{self.device_name}/{self.lines}')
+                task.write(True)
+                time.sleep(3)
+                task.write(False)
+            print("Connection successful.")
+        except nidaqmx.DaqError as e:
+            print(f"NI-DAQ connection error: {e}")
+
 
 
 class HardwareManager:

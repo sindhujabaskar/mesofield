@@ -207,11 +207,15 @@ class ConfigController(QWidget):
         """Run the MDA sequence with the global Config object parameters loaded from JSON."""
         from mesofield.io import CustomWriter
         import threading
+        import useq
+        meso_sequence = useq.MDASequence(time_plan={"interval": 0, "loops": 100})
+        pupil_sequence = useq.MDASequence(metadata=self.config.hardware.nidaq.__dict__,
+                                          time_plan={"interval": 0, "loops": 100})
+        #meso_sequence.estimate_duration()
 
         # TODO: Add a check for the MDA sequence and pupil sequence
-        # TODO: add a triggerable parameter
-        thread1 = threading.Thread(target=self._mmc1.run_mda, args=(self.config.meso_sequence,), kwargs={'output': CustomWriter(self.config.meso_file_path)})
-        thread2 = threading.Thread(target=self._mmc2.run_mda, args=(self.config.pupil_sequence,), kwargs={'output': CustomWriter(self.config.pupil_file_path)})
+        thread1 = threading.Thread(target=self._mmc1.run_mda, args=(meso_sequence,), kwargs={'output': CustomWriter(self.config.meso_file_path)})
+        thread2 = threading.Thread(target=self._mmc2.run_mda, args=(pupil_sequence,), kwargs={'output': CustomWriter(self.config.pupil_file_path)})
 
         # Wait for spacebar press if start_on_trigger is True
         wait_for_trigger = self.config.start_on_trigger
