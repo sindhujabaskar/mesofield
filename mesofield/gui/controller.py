@@ -85,8 +85,11 @@ class ConfigController(QWidget):
         # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
 
         self.config = cfg
-        self._mmc1: CMMCorePlus = self.mmcores[0]
-        self._mmc2: CMMCorePlus = self.mmcores[1]
+        if len(self.mmcores) == 1:
+            self._mmc: CMMCorePlus = self.mmcores[0]
+        elif len(self.mmcores) == 2:
+            self._mmc1: CMMCorePlus = self.mmcores[0]
+            self._mmc2: CMMCorePlus = self.mmcores[1]
 
         self.psychopy_process = None
 
@@ -209,20 +212,25 @@ class ConfigController(QWidget):
         import threading
 
         # TODO: Add a check for the MDA sequence and pupil sequence
-        # TODO: add a triggerable parameter
-        thread1 = threading.Thread(target=self._mmc1.run_mda, args=(self.config.meso_sequence,), kwargs={'output': CustomWriter(self.config.meso_file_path)})
-        thread2 = threading.Thread(target=self._mmc2.run_mda, args=(self.config.pupil_sequence,), kwargs={'output': CustomWriter(self.config.pupil_file_path)})
+        # TODO: Fix this ugly logic :)
+        if len(self.mmcores) == 1:
+            thread = threading.Thread(target=self._mmc.run_mda, args=(self.config.pupil_sequence,), kwargs={'output': CustomWriter(self.config.pupil_file_path)})
+        elif len(self.mmcores) == 2:        
+            thread1 = threading.Thread(target=self._mmc1.run_mda, args=(self.config.meso_sequence,), kwargs={'output': CustomWriter(self.config.meso_file_path)})
+            thread2 = threading.Thread(target=self._mmc2.run_mda, args=(self.config.pupil_sequence,), kwargs={'output': CustomWriter(self.config.pupil_file_path)})
 
         # Wait for spacebar press if start_on_trigger is True
         if self.config.start_on_trigger == "True":
             self.launch_psychopy()
             self.show_popup()
-        # Emit signal to notify other widgets
 
-        thread1.start()
-        thread2.start()
+        if len(self.mmcores) == 1:
+            thread.start()
+        elif len(self.mmcores) == 2:        
+            thread1.start()
+            thread2.start()
         self.config.encoder.start()
-        self.recordStarted.emit() # Signals to start the MDA sequence
+        self.recordStarted.emit() # Signals to start the MDA sequence to notify other widgets
 
     def launch_psychopy(self):
         """Launches a PsychoPy experiment as a subprocess with the current ExperimentConfig parameters."""
