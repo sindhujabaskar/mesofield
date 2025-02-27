@@ -1,14 +1,14 @@
+import os
+import winreg
 import base64
-import dill
 from dataclasses import dataclass
 
+import dill
 from PyQt6.QtCore import QProcess
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from mesofield.config import ExperimentConfig
-import os
-import winreg
 
 class PsychopyParameters:
     def __init__(self, params: dict):
