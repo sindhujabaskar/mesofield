@@ -8,6 +8,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QProcess
 
+from mesofield.config import ExperimentConfig
+from mesofield.subprocesses import psychopy 
+import sys
+import pickle
+import base64
+import pickle, base64
+
 """ This test_script is used to test a launching a prebuilt Psychopy experiment script 
 as a subprocess which epxects parameters piped from a parent process. 
 
@@ -47,6 +54,39 @@ def launch_experiment(python_path, experiment_path, subject, session, save_dir, 
     psychopy_process = QProcess()
     psychopy_process.start(args[0], args[1:])
     
+    return psychopy_process
+
+def launch_experiment_pickle(cfg: ExperimentConfig):
+    """
+    Launch the experiment by passing a pickled ExperimentConfig via the command line.
+
+    The ExperimentConfig object is serialized with pickle and encoded in base64 to be safely
+    delivered as a single command line argument.
+
+    Example for the subprocess to unpickle the config:
+    ```python
+    if len(sys.argv) > 1:
+        # Assume the pickled config is the second argument (first argument after the script)
+        pickled_cfg_str = sys.argv[1]
+        cfg = pickle.loads(base64.b64decode(pickled_cfg_str))
+        # Now use 'cfg' as your configuration object
+    ```
+    """
+
+    # Serialize and encode the ExperimentConfig
+    pickled_bytes = pickle.dumps(cfg)
+    pickled_str = base64.b64encode(pickled_bytes).decode('utf-8')
+
+    # Use the python and experiment paths stored in the configuration
+    args = [
+        cfg.python_path,      # Path to the Python interpreter
+        cfg.experiment_path,  # Path to the experiment script
+        pickled_str           # Encoded pickled ExperimentConfig object
+    ]
+
+    psychopy_process = QProcess()
+    psychopy_process.start(args[0], args[1:])
+
     return psychopy_process
 
 class PsychopyGui(QWidget):
@@ -102,23 +142,46 @@ class PsychopyGui(QWidget):
         except Exception as e:
             print(f"Error launching PsychoPy: {e}")
 
-def main():
-    app = QApplication(sys.argv)
-    gui = PsychopyGui()
-    gui.show()
-    sys.exit(app.exec())
+class DillPsychopyGui(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+
+    def initUI(self):
+        self.config = ExperimentConfig('dev.yaml')
+        self.config.load_parameters(r'C:\dev\mesofield\tests\devsub.json')
+        self.config.hardware._configure_engines(self.config)
+        self.setWindowTitle("PsychoPy Launcher")
+        layout = QFormLayout()
+        
+        run_button = QPushButton("Run")
+        run_button.clicked.connect(self.on_run_clicked)
+        layout.addRow(run_button)
+
+        self.setLayout(layout)
+
+    def on_run_clicked(self):
+        self.psychopy_process = psychopy.launch(self.config, self)
+
+
+# def main():
+
+#     app = QApplication(sys.argv)
+#     gui = DillPsychopyGui(config)
+#     gui.show()
+#     sys.exit(app.exec())
     
-    # process = launch_experiment(
-    #     python_path=r"C:\\Program Files\\PsychoPy\\python.exe",
-    #     experiment_path=r"D:\Experiment Types\Checkerboard Experiment\CheckerBar_vis_build-v0.8.py",
-    #     subject="Subject1",
-    #     session="Session1",
-    #     save_dir=r"C:\\",
-    #     num_trials="1",
-    #     filename=r"D:\Experiment Types\Checkerboard Experiment\data\filename_test2"
-    #     )
+#     # process = launch_experiment(
+#     #     python_path=r"C:\\Program Files\\PsychoPy\\python.exe",
+#     #     experiment_path=r"D:\Experiment Types\Checkerboard Experiment\CheckerBar_vis_build-v0.8.py",
+#     #     subject="Subject1",
+#     #     session="Session1",
+#     #     save_dir=r"C:\\",
+#     #     num_trials="1",
+#     #     filename=r"D:\Experiment Types\Checkerboard Experiment\data\filename_test2"
+#     #     )
     
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

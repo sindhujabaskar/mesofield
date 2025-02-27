@@ -1,0 +1,31 @@
+memory_buffer_size: 10000
+viewer_type: "static"
+
+encoder:
+  type: "wheel"
+  port: "COM4"
+  baudrate: 57600
+  cpr: 2400
+  diameter_mm: 80
+  sample_interval_ms: 20
+  development_mode: False
+
+cameras:
+  - id: "dev"
+    name: "devcam1"
+    backend: "micromanager"
+    micromanager_path: "C:/Program Files/Micro-Manager-2.0"
+
+
+  - id: "dev"
+    name: "devcam2"
+    backend: "micromanager"
+    micromanager_path: "C:/Program Files/Micro-Manager-thor"
+
+
+
+  # - id: "arducam"
+  #   name: "arducam"
+  #   backend: "opencv"
+  #   properties:
+  #     fps: 30
