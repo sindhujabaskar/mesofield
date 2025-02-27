@@ -19,7 +19,7 @@ except ImportError:
     # These are not required for unpickling.
     pass
 
-
+from mesofield.hardware import HardwareManager
 
 class ExperimentConfig:
     """## Generate and store parameters loaded from a JSON file. 
@@ -161,12 +161,23 @@ class ExperimentConfig:
     
     @property
     def psychopy_filename(self) -> str:
-        py_files = list(pathlib.Path(self._save_dir).glob('*.py'))
-        if py_files:
-            return py_files[0].name
-        else:
-            warnings.warn(f'No Psychopy experiment file found in directory {pathlib.Path(self.save_dir).parent}.')
-        return self._parameters.get('psychopy_filename', 'experiment.py')
+        """Path to PsychoPy script within the Experiment Directory.
+
+        NOTE: Requires the JSON file to have a 'psychopy_filename' key
+        
+        Returns:
+            str: path to psychopy.py experiment script
+        """
+        
+        filename = self._parameters.get('psychopy_filename', 'experiment.py')
+        # in case the .json file does not include the .py file extension (silly but probable)
+        if not filename.endswith('.py'):
+            filename += '.py'
+        # search for the psychopy filename in the Experiment directory (ie. where the JSON file was loaded from)
+        for root, _, files in os.walk(self._save_dir):
+            if filename in files:
+                return os.path.join(root, filename)
+        return os.path.join(self._save_dir, filename)
     
     @psychopy_filename.setter
     def psychopy_filename(self, value: str) -> None:
@@ -187,7 +198,7 @@ class ExperimentConfig:
             'session': self.session,
             'save_dir': self.save_dir,
             'num_trials': self.num_trials,
-            'filename': self.psychopy_save_path
+            'save_path': self.psychopy_save_path
         }
     
     @property
@@ -208,13 +219,13 @@ class ExperimentConfig:
     
     # Helper method to generate a unique file path
     def _generate_unique_file_path(self, suffix: str, extension: str, bids_type: str = None):
-        """ Example:
-        ```py
+        """ Generates unique filename with timestamp and BIDS indentifiers
+        
+        ```python
             ExperimentConfig._generate_unique_file_path("images", "jpg", "func")
             print(unique_path)
+            `20250110_123456_sub-001_ses-01_task-example_images.jpg`
         ```
-        Output:
-            C:/save_dir/data/sub-id/ses-id/func/20250110_123456_sub-001_ses-01_task-example_images.jpg
         """
         file = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_sub-{self.subject}_ses-{self.session}_task-{self.task}_{suffix}.{extension}"
 
@@ -235,6 +246,8 @@ class ExperimentConfig:
     def load_parameters(self, json_file_path) -> None:
         """ Load parameters from a JSON file path into the config object. 
         """
+        self._json_file_path = json_file_path 
+        self.save_dir = os.path.dirname(os.path.abspath(json_file_path))
         try:
             with open(json_file_path, 'r') as f: 
                 self._parameters = json.load(f)
@@ -305,208 +318,4 @@ class ConfigLoader:
     def set_attributes(self):
         for key, value in self.parameters.items():
             setattr(self, key, value)
-
-"""
-Example refactoring of a startup script using YAML for configuration.
-Preserves:
-- Per-camera instantiation of CMMCorePlus
-- Camera-Engine pairing
-- Accessible hardware references
-- Extensible for new hardware types (e.g., NI-DAQ)
-
-Requires:
-  - pyyaml (pip install pyyaml)
-  - pymmcore-plus (pip install pymmcore-plus)
-  
-  {self.__class__.__module__}.{self.__class__.__name__}
-"""
-
-VALID_BACKENDS = {"micromanager", "opencv"}
-   
-
-class Daq:
-    """
-    Represents an abstracted NI-DAQ device.
-    """
-
-    def __init__(self, config: dict):
-        self.config = config
-        self.type = config.get("type", "unknown")
-        self.port = config.get("port")
-
-
-    def __repr__(self):
-        return (
-            f"<Daq type='{self.type}' port='{self.port}' "
-            f"config={self.config}>"
-        )
-
-class HardwareManager:
-    """
-    High-level class that initializes all hardware (cameras, encoder, etc.)
-    using the ParameterManager. Keeps references easily accessible.
-    """
-
-    def __init__(self, config_file: str):
-        self.yaml = self._load_hardware_from_yaml(config_file)
-        self.cameras: tuple = ()
-        self._viewer = self.yaml['viewer_type']
-        self._initialize_cameras()
-        self._initialize_encoder()
-
-    def __repr__(self):
-        return (
-            "<HardwareManager>\n"
-            f"  Cameras: {[cam for cam in self.cameras]}\n"
-            f"  Encoder: {self.encoder}\n"
-            f"  Config: {self.yaml}\n"
-            #f"  loaded_keys={list(self.params.keys())}\n"
-            "</HardwareManager>"
-        )
-        
-        
-    def shutdown(self):
-        self.encoder.stop()
-    
-    def _load_hardware_from_yaml(self, path):
-        params = {}
-
-        if not path:
-            raise FileNotFoundError(f"Cannot find config file at: {path}")
-
-        with open(path, "r", encoding="utf-8") as file:
-            params = yaml.safe_load(file) or {}
-            
-        return params
-            
-            
-    def _initialize_encoder(self):
-        if self.yaml.get("encoder"):
-            params = self.yaml.get("encoder")
-            self.encoder = SerialWorker(
-                serial_port=params.get('port'),
-                baud_rate=params.get('baudrate'),
-                sample_interval=params.get('sample_interval_ms'),
-                wheel_diameter=params.get('diameter_mm'),
-                cpr=params.get('cpr'),
-                development_mode=params.get('development_mode')
-            )
-         
-         
-    def _initialize_cameras(self):
-        """
-        Initialize and configure camera objects based on YAML settings.
-        This method reads the "cameras" section of a YAML configuration file,
-        iterating over each camera definition. Depending on the specified backend
-        (micromanager or opencv), it initializes and returns corresponding camera
-        objects while applying any device-specific properties (e.g., ROI, fps, and
-        other hardware settings).
-        
-        For Micro-Manager backends:
-            - Creates an engine instance based on the camera ID (ThorCam, Dhyana, or a
-                generic DevEngine).
-            - Loads the Micro-Manager core, optionally setting hardware sequencing.
-            - Applies properties from the configuration file, including ROI and fps.
-        
-        For OpenCV backends:
-            - Creates a simple VideoThread instance.
-            
-        All resulting camera objects are placed into a tuple stored in the 'cameras'
-        attribute of the object, and instance attributes are created for each by
-        camera id enabling their access elsewhere:
-        
-        ```python
-        HardwareManager.ThorCam
-        HardwareManager.Dhyana
-        HardwareManager.cameras[0]
-        ```
-        
-        """
-
-        cams = []
-        for camera_config in self.yaml.get("cameras"):
-            camera_id = camera_config.get("id")
-            backend = camera_config.get("backend")
-            if backend == "micromanager":
-                core = self._get_core_object(
-                    camera_config.get("micromanager_path"),
-                    camera_config.get("configuration_path", None),
-                )
-                camera_object = core.getDeviceObject(camera_id)
-                for device_id, props in camera_config.get("properties", {}).items():
-                    if isinstance(props, dict):
-                        for property_id, value in props.items():
-                            if property_id == 'ROI':
-                                print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
-                                core.setROI(device_id, *value) # * operator used to unpack the {type(value)=list}: [x, y, width, height]
-                            elif property_id == 'fps':
-                                print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
-                                setattr(camera_object, 'fps', value)
-                            elif property_id == 'viewer_type':
-                                setattr(self, 'viewer', value)
-                            else:
-                                print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
-                                core.setProperty(device_id, property_id, value)
-                    else:
-                        pass
-                if camera_id == 'ThorCam':
-                    engine = PupilEngine(core, use_hardware_sequencing=True)
-                    core.mda.set_engine(engine)
-                    print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {engine}")
-                elif camera_id == 'Dhyana':
-                    engine = MesoEngine(core, use_hardware_sequencing=True)
-                    core.mda.set_engine(engine)
-                    print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {engine}")
-                else:
-                    engine = DevEngine(core, use_hardware_sequencing=True)
-                    core.mda.set_engine(engine)
-                    print (f"{self.__class__.__module__}.{self.__class__.__name__}.engine: {engine}")
-                
-            elif backend == 'opencv':
-                camera_object = VideoThread()
-                
-            cams.append(camera_object)
-            setattr(self, camera_id, camera_object)
-            self.cameras = tuple(cams)
-                
-    
-    def _get_core_object(self, mm_path, mm_cfg_path):
-        core = CMMCorePlus(mm_path)
-        if mm_path and mm_cfg_path is not None:
-            core.loadSystemConfiguration(mm_cfg_path)
-        elif mm_cfg_path is None and mm_path:
-            core.loadSystemConfiguration()
-        return core
-
-
-    @staticmethod
-    def get_property_object(core : CMMCorePlus, device_id: str, property_id: str):
-        return core.getPropertyObject(device_id, property_id)
-    
-    
-    def _configure_engines(self, cfg):
-        """ If using micromanager cameras, configure the engines <camera.core.mda.engine.set_config(cfg)>
-        """
-        for cam in self.cameras:
-            if isinstance:
-                cam.core.mda.engine.set_config(cfg)
-
-
-    def cam_backends(self, backend):
-        """ Generator to iterate through cameras with a specific backend.
-        """
-        for cam in self.cameras:
-            if cam.backend == backend:
-                yield cam
-
-
-    def _test_camera_backends(self):
-        """ Test if the backend values of cameras are either 'micromanager' or 'opencv'.
-        """
-        for cam in self.cam_backends("micromanager"):
-            assert cam.backend in VALID_BACKENDS, f"Invalid backend {cam.backend} for camera {cam.id}"
-        for cam in self.cam_backends("opencv"):
-            assert cam.backend in VALID_BACKENDS, f"Invalid backend {cam.backend} for camera {cam.id}"
-
-
 
