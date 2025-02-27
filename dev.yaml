@@ -23,7 +23,6 @@ cameras:
     micromanager_path: "C:/Program Files/Micro-Manager-thor"
 
 
-
   # - id: "arducam"
   #   name: "arducam"
   #   backend: "opencv"

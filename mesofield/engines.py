@@ -133,6 +133,13 @@ class PupilEngine(MDAEngine):
         self._config = cfg
         self._encoder = cfg.encoder
         self._nidaq = cfg.hardware.nidaq
+
+    def setup_sequence(self, sequence: useq.MDASequence) -> SummaryMetaV1 | None:
+        self.nidaq = sequence.metadata.get("device_name")
+        self.lines = sequence.metadata.get("lines")
+        self.io_type = sequence.metadata.get("io_type")
+        logging.info(f'{self.__str__()} setup_sequence loaded Nidaq: {self.nidaq} with lines {self.lines} of type: {self.io_type}')
+        return super().setup_sequence(sequence)
         
     def exec_sequenced_event(self, event: 'SequencedEvent') -> Iterable['PImagePayload']:
         """Execute a sequenced (triggered) event and return the image data.
@@ -183,6 +190,28 @@ class PupilEngine(MDAEngine):
         n_channels = self._mmc.getNumberOfCameraChannels()
         count = 0
         iter_events = product(event.events, range(n_channels))
+
+        #https://github.com/pymmcore-plus/useq-schema/issues/213 
+        if self.nidaq is not None and self.io_type == "DO":
+                with nidaqmx.Task() as task:
+                    task.do_channels.add_do_chan(lines=f"{self.nidaq}/{self.lines}", 
+                                                name_to_assign_to_lines="DevEngine_Trigger",
+                                                line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    task.start()
+                    task.write(True)
+                    #task.stop()
+                    logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
+
+        elif self.nidaq is not None and self.io_type == "DI":
+                with nidaqmx.Task() as task:
+                    task.di_channels.add_di_chan(lines=f"{self.nidaq}/{self.lines}", 
+                                                name_to_assign_to_lines="DevEngine_Trigger",
+                                                line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.nidaq}/{self.lines} waiting for trigger')
+                    while not task.read():
+                        pass
+                    logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
+
         # block until the sequence is done, popping images in the meantime
         while True:
             if self._mmc.isSequenceRunning():
@@ -194,8 +223,8 @@ class PupilEngine(MDAEngine):
                 else:
                     if count == n_events:
                         logging.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
+                        self._mmc.stopSequenceAcquisition() 
                         break
-                        #self._mmc.stopSequenceAcquisition() 
                     time.sleep(0.001)
             else:
                 break
@@ -214,6 +243,21 @@ class PupilEngine(MDAEngine):
     def teardown_sequence(self, sequence: useq.MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
         logging.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
+        self._encoder.stop()
+        # Get and store the encoder data
+        self._wheel_data = self._encoder.get_data()
+        self._config.save_wheel_encoder_data(self._wheel_data)
+        self._config.save_configuration()
+
+        if self.nidaq is not None and self.io_type == "DO":
+                with nidaqmx.Task() as task:
+                    task.do_channels.add_do_chan(lines=f"{self.nidaq}/{self.lines}", 
+                                                name_to_assign_to_lines="DevEngine_Trigger",
+                                                line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    task.start()
+                    task.write(False)
+                    task.stop()
+                    logging.info(f'{self.__str__()}.teardown_sequence Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
         pass
     
 
