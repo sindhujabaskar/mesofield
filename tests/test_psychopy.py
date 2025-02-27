@@ -1,10 +1,13 @@
 import sys
 from PyQt6.QtWidgets import (
-    QApplication,
     QWidget,
     QLineEdit,
     QPushButton,
-    QFormLayout
+    QFormLayout,
+    QLabel,
+    QComboBox,
+    QHBoxLayout,
+    QFileDialog,
 )
 from PyQt6.QtCore import QProcess
 
@@ -14,6 +17,7 @@ import sys
 import pickle
 import base64
 import pickle, base64
+import os
 
 """ This test_script is used to test a launching a prebuilt Psychopy experiment script 
 as a subprocess which epxects parameters piped from a parent process. 
@@ -24,17 +28,24 @@ Below is the custom-code in a Psychopy experiment that accepts the sysargs:
 #=============================== Custom Codeblock jgronemeyer =====================================#
 #add system argument functionality
 #Get command line arguments passed if present
-#sysarg_protocol_id = 'prot'
-sysarg_subject_id = 'sub'
-sysarg_session_id = 'ses'
-sysarg_save_dir = None
-nTrials = 1 # changed data.TrialHandler2 object value nReps value to call this variable
-if len(sys.argv) > 1:
-    sysarg_subject_id = sys.argv[1]  # get the second argument from command line
-    sysarg_session_id = sys.argv[2]  # get the third argument from command line
-    sysarg_save_dir = sys.argv[3]  # get the fourth argument from command line
-    nTrials = sys.argv[4] # get the fifth argument from the command line
-    save_path = sys.argv[5] #used to assign the data_file_path or `filename` variable for saving
+import sys
+import dill
+import base64
+
+sys.path.append(r'C:/dev/mesofield') # Add the path to the mesofield package for the config object
+b64_serialized_config = sys.argv[1] #Get the base64 encoded serialized config from the command line
+serialized_config = base64.b64decode(b64_serialized_config) # Decode it from base64 to the original serialized bytes
+config = dill.loads(serialized_config) # Use dill to load the ExperimentConfig object
+
+# Debugging: print the configuration
+print("Decoded ExperimentConfig object:")
+print(config)
+
+sysarg_subject_id = config.subject  
+sysarg_session_id = config.session  
+sysarg_save_dir = config.save_dir 
+nTrials = config.num_trials
+sysarg_save_path = config.save_path
 #==================================================================================================#
 """
 
@@ -146,19 +157,68 @@ class DillPsychopyGui(QWidget):
     def __init__(self):
         super().__init__()
         self.initUI()
+        self.initConnections()
 
     def initUI(self):
-        self.config = ExperimentConfig('dev.yaml')
-        self.config.load_parameters(r'C:\dev\mesofield\tests\devsub.json')
-        self.config.hardware._configure_engines(self.config)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        yaml_path = os.path.join(script_dir, 'dev.yaml')
+        self.config = ExperimentConfig(yaml_path)
+
         self.setWindowTitle("PsychoPy Launcher")
-        layout = QFormLayout()
+        layout = QHBoxLayout()
         
+        # 1. Selecting a save directory
+        self.directory_label = QLabel('Select Save Directory:')
+        self.directory_line_edit = QLineEdit()
+        self.directory_line_edit.setReadOnly(True)
+        self.directory_button = QPushButton('Browse')
+
+        dir_layout = QHBoxLayout()
+        dir_layout.addWidget(self.directory_label)
+        dir_layout.addWidget(self.directory_line_edit)
+        dir_layout.addWidget(self.directory_button)
+
+        layout.addLayout(dir_layout)
+
+        # 2. Dropdown Widget for JSON configuration files
+        self.json_dropdown_label = QLabel('Select JSON Config:')
+        self.json_dropdown = QComboBox()
+        
+        layout.addWidget(self.json_dropdown_label)
+        layout.addWidget(self.json_dropdown)
+        layout.addWidget(self.directory_line_edit)
+
         run_button = QPushButton("Run")
         run_button.clicked.connect(self.on_run_clicked)
-        layout.addRow(run_button)
+        layout.addWidget(run_button)
 
         self.setLayout(layout)
+    
+    def initConnections(self):
+        self.json_dropdown.currentIndexChanged.connect(self._update_config)
+        self.directory_button.clicked.connect(self._select_directory)
+    
+    def _select_directory(self):
+        """Open a dialog to select a directory and update the GUI accordingly."""
+        directory = QFileDialog.getExistingDirectory(self, "Select Save Directory")
+        if directory:
+            self.directory_line_edit.setText(directory)
+            self._get_json_file_choices(directory)
+
+
+    def _get_json_file_choices(self, path):
+        """Return a list of JSON files in the current directory."""
+        import glob
+        try:
+            json_files = glob.glob(os.path.join(path, "*.json"))
+            self.json_dropdown.clear()
+            self.json_dropdown.addItems(json_files)
+        except Exception as e:
+            print(f"Error getting JSON files from directory: {path}\n{e}")
+
+    def _update_config(self, index):
+        """Update the experiment configuration from a new JSON file."""
+        self.config.load_parameters(self.json_dropdown.currentText())
 
     def on_run_clicked(self):
         self.psychopy_process = psychopy.launch(self.config, self)
