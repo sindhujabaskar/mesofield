@@ -2,9 +2,6 @@ import os
 import logging
 
 import click
-from PyQt6.QtWidgets import QApplication
-from mesofield.gui.maingui import MainWindow
-from mesofield.config import ExperimentConfig
 
 # Disable pymmcore-plus logger
 package_logger = logging.getLogger('pymmcore-plus')
@@ -17,6 +14,10 @@ os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
 logging.getLogger("ipykernel.inprocess.ipkernel").setLevel(logging.WARNING)
 
 def launch_mesofield(params):
+    from PyQt6.QtWidgets import QApplication
+    from mesofield.gui.maingui import MainWindow
+    from mesofield.config import ExperimentConfig
+
     """Launch the mesofield acquisition interface."""
     print('Launching mesofield acquisition interface...')
     app = QApplication([])
