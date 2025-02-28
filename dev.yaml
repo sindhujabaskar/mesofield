@@ -1,6 +1,11 @@
 memory_buffer_size: 10000
 viewer_type: "static"
 
+nidaq:
+  device_name: "Dev1"
+  lines: "port2/line0"
+  io_type: "DO"
+
 encoder:
   type: "wheel"
   port: "COM4"

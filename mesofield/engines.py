@@ -1,3 +1,4 @@
+import nidaqmx.system
 import useq
 import time
 from itertools import product
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
     
 from pymmcore_plus.metadata import SummaryMetaV1
 from pymmcore_plus.mda import MDAEngine
-
+import nidaqmx
 import logging
 logging.basicConfig(filename='engine.log', level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -125,13 +126,21 @@ class PupilEngine(MDAEngine):
         super().__init__(mmc)
         self._mmc: CMMCorePlus = mmc
         self.use_hardware_sequencing = use_hardware_sequencing
-        self._config = None
         self._wheel_data = None
         # TODO: add triggerable parameter
         
-    def set_config(self, cfg) -> None:
-        self._config: ExperimentConfig = cfg
-        self._encoder: SerialWorker = cfg.encoder
+    def set_config(self, cfg: 'ExperimentConfig') -> None:
+        self._config = cfg
+        self._encoder = cfg.encoder
+        self._nidaq = cfg.hardware.nidaq
+
+    def setup_sequence(self, sequence: useq.MDASequence) -> SummaryMetaV1 | None:
+        self.nidaq = sequence.metadata.get("device_name")
+        self.lines = sequence.metadata.get("lines")
+        self.io_type = sequence.metadata.get("io_type")
+        self._nidaq.reset()
+        logging.info(f'{self.__str__()} setup_sequence loaded Nidaq: {self.nidaq} with lines {self.lines} of type: {self.io_type}')
+        return super().setup_sequence(sequence)
         
     def exec_sequenced_event(self, event: 'SequencedEvent') -> Iterable['PImagePayload']:
         """Execute a sequenced (triggered) event and return the image data.
@@ -146,7 +155,26 @@ class PupilEngine(MDAEngine):
 
         t0 = event.metadata.get("runner_t0") or time.perf_counter()
         event_t0_ms = (time.perf_counter() - t0) * 1000
-        
+
+        #https://github.com/pymmcore-plus/useq-schema/issues/213 
+        if self.nidaq is not None and self.io_type == "DO":
+            data = [True, True, False]
+            task = nidaqmx.Task()
+            task.do_channels.add_do_chan(lines=f"{self.nidaq}/{self.lines}")
+            task.start()
+            task.write(data)
+            logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
+            task.stop()
+            task.close()
+
+        elif self.nidaq is not None and self.io_type == "DI":
+            with nidaqmx.Task() as task:
+                task.di_channels.add_di_chan(lines=f"{self.nidaq}/{self.lines}")
+                logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.nidaq}/{self.lines} waiting for trigger')
+                while not task.read():
+                    pass
+                logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
+
         # Start sequence
         # Note that the overload of startSequenceAcquisition that takes a camera
         # label does NOT automatically initialize a circular buffer.  So if this call
@@ -162,6 +190,8 @@ class PupilEngine(MDAEngine):
         n_channels = self._mmc.getNumberOfCameraChannels()
         count = 0
         iter_events = product(event.events, range(n_channels))
+
+
         # block until the sequence is done, popping images in the meantime
         while True:
             if self._mmc.isSequenceRunning():
@@ -173,8 +203,8 @@ class PupilEngine(MDAEngine):
                 else:
                     if count == n_events:
                         logging.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
+                        self._mmc.stopSequenceAcquisition() 
                         break
-                        #self._mmc.stopSequenceAcquisition() 
                     time.sleep(0.001)
             else:
                 break
@@ -193,8 +223,22 @@ class PupilEngine(MDAEngine):
     def teardown_sequence(self, sequence: useq.MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
         logging.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
+        self._encoder.stop()
+        # Get and store the encoder data
+        self._wheel_data = self._encoder.get_data()
+        self._config.save_wheel_encoder_data(self._wheel_data)
+        self._config.save_configuration()
+
+        # if self.nidaq is not None and self.io_type == "DO":
+        #         with nidaqmx.Task() as task:
+        #             task.do_channels.add_do_chan(lines=f"{self.nidaq}/{self.lines}")
+        #             task.start()
+        #             task.write(False)
+        #             task.stop()
+        #             logging.info(f'{self.__str__()}.teardown_sequence Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
         pass
     
+
 
 
 class DevEngine(MDAEngine):
