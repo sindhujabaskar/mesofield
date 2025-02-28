@@ -1,6 +1,7 @@
 VALID_BACKENDS = {"micromanager", "opencv"}
 import time
 from dataclasses import dataclass
+import nidaqmx.system
 import yaml
 
 import nidaqmx
@@ -32,6 +33,11 @@ class Nidaq:
             print("Connection successful.")
         except nidaqmx.DaqError as e:
             print(f"NI-DAQ connection error: {e}")
+
+    def reset(self):
+        print(f"Resetting NI-DAQ device: {self.device_name}")
+        nidaqmx.system.Device(self.device_name).reset_device()
+
 
 
 
@@ -139,7 +145,7 @@ class HardwareManager:
                     camera_config.get("micromanager_path"),
                     camera_config.get("configuration_path", None),
                 )
-                #camera_object = core.getDeviceObject(camera_id)
+                camera_object = core.getDeviceObject(camera_id)
                 for device_id, props in camera_config.get("properties", {}).items():
                     if isinstance(props, dict):
                         for property_id, value in props.items():
@@ -148,7 +154,7 @@ class HardwareManager:
                                 core.setROI(device_id, *value) # * operator used to unpack the {type(value)=list}: [x, y, width, height]
                             elif property_id == 'fps':
                                 print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
-                                #setattr(camera_object, 'fps', value)
+                                setattr(camera_object, 'fps', value)
                             elif property_id == 'viewer_type':
                                 setattr(self, 'viewer', value)
                             else:
@@ -172,8 +178,8 @@ class HardwareManager:
             elif backend == 'opencv':
                 camera_object = VideoThread()
                 
-            cams.append(core)
-            #setattr(self, camera_id, camera_object)
+            cams.append(camera_object)
+            setattr(self, camera_id, camera_object)
             self.cameras = tuple(cams)
                 
     
@@ -195,8 +201,8 @@ class HardwareManager:
         """ If using micromanager cameras, configure the engines <camera.core.mda.engine.set_config(cfg)>
         """
         for cam in self.cameras:
-            #if isinstance(cam.core, CMMCorePlus):
-            cam.mda.engine.set_config(cfg)
+            if isinstance(cam.core, CMMCorePlus):
+                cam.core.mda.engine.set_config(cfg)
 
 
     def cam_backends(self, backend):
