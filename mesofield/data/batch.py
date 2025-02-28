@@ -1,42 +1,53 @@
-import time
-import numpy as np
-import tifffile
-import cv2
-from tqdm import tqdm
-import concurrent.futures
-from concurrent.futures import ProcessPoolExecutor
 import os
+import concurrent.futures
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
-def tiff_to_video(
-    tiff_path: str,
-    output_path: str,
-    fps: int = 30,
-    output_format: str = "mp4",
-    use_color: bool = False,
-    show_progress: bool = True,
-    tqdm_position: int = 0
-):
+import numpy as np
+from tqdm import tqdm
+import tifffile
+
+
+def mean_trace_from_tiff(tiff_paths, show_progress=True, save=False):
+    """
+    Computes the mean traces for multiple TIFF files concurrently.
+    Returns a dictionary mapping each file path to its mean trace.
+    """
+    import concurrent.futures
+    
+    def _compute_mean_trace(tiff_path):
+        tiff_array = tifffile.memmap(tiff_path)
+        return np.mean(tiff_array, axis=(1, 2))
+    
+    with ThreadPoolExecutor() as executor:
+        futures = {executor.submit(_compute_mean_trace, path): path for path in tiff_paths}
+        results = {}
+        
+        if show_progress:
+            with tqdm(total=len(tiff_paths), desc="Computing mean traces", leave=False) as pbar:
+                for future in concurrent.futures.as_completed(futures):
+                    path = futures[future]
+                    results[path] = future.result()
+                    pbar.update(1)
+        else:
+            for future in concurrent.futures.as_completed(futures):
+                path = futures[future]
+                results[path] = future.result()
+    
+    return results
+
+
+def tiff_to_video(tiff_path: str,
+                  output_path: str,
+                  fps: int = 30,
+                  output_format: str = "mp4",
+                  use_color: bool = False,
+                  show_progress: bool = True,
+                  tqdm_position: int = 0):
     """
     Converts a multi-page TIFF stack to a video format.
-    
-    Parameters
-    ----------
-    tiff_path : str
-        Path to the input TIFF file.
-    output_path : str
-        Path to the output video file.
-    fps : int
-        Frames per second for the output video.
-    output_format : str
-        Video format extension ('avi' or 'mp4'). 
-        If 'mp4', chooses an appropriate fourcc code for H.264 or similar.
-    use_color : bool
-        Set to True if your images are RGB. For a single-channel grayscale, use False.
-    show_progress : bool
-        Whether to display a progress bar for frame processing.
-    tqdm_position : int
-        The line offset to display the progress bar.
     """
+    import cv2
+
     tiff_array = tifffile.memmap(tiff_path)  # shape -> (num_frames, height, width) or (num_frames, height, width, channels)
     
     num_frames = tiff_array.shape[0]
@@ -44,9 +55,9 @@ def tiff_to_video(
     width = tiff_array.shape[2] if not use_color else tiff_array.shape[2]
     
     if output_format.lower() == 'avi':
-        fourcc = cv2.VideoWriter_fourcc(*'MJPG')  # or 'XVID'
+        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
     elif output_format.lower() == 'mp4':
-        fourcc = cv2.VideoWriter_fourcc(*'H264')  # H.264 baseline
+        fourcc = cv2.VideoWriter_fourcc(*'H264')
     else:
         raise ValueError(f"Unsupported output_format '{output_format}'. Use 'avi' or 'mp4'.")
     
@@ -58,6 +69,7 @@ def tiff_to_video(
         isColor=use_color
     )
     
+    # Create a progress bar that updates and then clears itself when done.
     frame_iter = tqdm(
         range(num_frames),
         desc=f"Processing {os.path.basename(tiff_path)}",
@@ -69,13 +81,15 @@ def tiff_to_video(
     for i in frame_iter:
         frame = tiff_array[i]
         if frame.dtype != np.uint8:
+            # Normalize the frame to the range [0, 255] before converting to uint8
+            frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
             frame = cv2.convertScaleAbs(frame)
         out.write(frame)
     
     out.release()
-    
 
-def convert_one(args):
+
+def _convert_one(args):
     """
     Worker function to convert a single TIFF file to video.
     
@@ -97,23 +111,13 @@ def convert_one(args):
         show_progress=True,
         tqdm_position=position
     )
-    
-    #return f"Converted {file_path} to {output_path}"
+    # Optionally, you could write a message for each finished conversion:
+    tqdm.write(f"Finished converting {os.path.basename(file_path)}")
 
-def parse_bids_files_and_convert(parent_directory, fps=30, output_format="mp4", use_color=False):
+
+def tiff_to_mp4(parent_directory, fps=30, output_format="mp4", use_color=False):
     """
     Parses the BIDS directory to find pupil.ome.tiff files and converts them to video.
-    
-    Parameters
-    ----------
-    parent_directory : str
-        Path to the parent directory containing the data folder.
-    fps : int, optional
-        Frames per second for the output video, by default 30.
-    output_format : str, optional
-        Output video format ('mp4' or 'avi'), by default "mp4".
-    use_color : bool, optional
-        Whether the TIFF images are in color, by default False.
     """
     found_files = []
     for root, dirs, files in os.walk(parent_directory):
@@ -132,30 +136,34 @@ def parse_bids_files_and_convert(parent_directory, fps=30, output_format="mp4", 
     if user_input.lower().startswith('y'):
         os.makedirs(processed_dir, exist_ok=True)
         
-        # Prepare arguments as a list of tuples, including unique positions
+        # Prepare arguments as a list of tuples, including unique progress bar positions
         args_list = [
             (file_path, processed_dir, output_format, fps, use_color, idx)
             for idx, file_path in enumerate(found_files)
         ]
 
         print("\nStarting conversion with multiprocessing...")
+        futures = []
         with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-            # Submit all tasks and collect futures
+            # Submit all tasks and store futures to ensure they all complete.
             for args in args_list:
-                executor.submit(convert_one, args) 
-            
-        
+                futures.append(executor.submit(_convert_one, args))
+            # Optionally, wait for all futures to complete
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
+                
     else:
         print("Conversion canceled.")
 
     print("\nConversion complete.")
 
+
 if __name__ == "__main__":
     # Example usage
-    parent_dir = r"D:\sbaskar\241220_etoh-checkerboard"  # Replace with your actual parent directory
+    parent_dir = r""  # Replace with your actual parent directory
     frames_per_second = 30
     
-    parse_bids_files_and_convert(
+    tiff_to_mp4(
         parent_directory=parent_dir,
         fps=frames_per_second,
         output_format="mp4",

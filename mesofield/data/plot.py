@@ -1,8 +1,129 @@
 import json
-import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
 import os
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def plot_session(
+    session_name, 
+    df_fluorescence, 
+    df_encoder,
+    df_pupil, 
+    fluorescence_x='Slice', 
+    fluorescence_y='Mean',
+    speed_col='Speed_filtered',
+    locomotion_threshold=0.001,
+    downsample=10,
+    x_limit=None
+):
+    """
+    Plots a single session as a two-panel figure:
+    1) Fluorescence trace with underlaid locomotion bouts
+    2) Speed trace
+    3) pupil diameter trace
+    
+    Parameters
+    ----------
+    session_name : str
+        Name/title for the session (e.g. 'Session 1').
+    df_fluorescence : pd.DataFrame
+        DataFrame containing columns for 'Slice' (x-axis) and 'Mean' (fluorescence).
+    df_encoder : pd.DataFrame
+        DataFrame containing the speed information, including 'Speed_filtered'.
+    fluorescence_x : str
+        Column name for x-axis (frame slices).
+    fluorescence_y : str
+        Column name for fluorescence intensities.
+    speed_col : str
+        Column name in df_encoder representing the speed to plot (e.g. 'Speed_filtered').
+    locomotion_threshold : float
+        Threshold for marking locomotion as active.
+    downsample : int
+        How much to downsample speed data for plotting (plot every Nth point).
+    x_limit : tuple or None
+        (min, max) for x-axis range, or None to let Matplotlib set automatically.
+    """
+    # Identify bouts of locomotion based on threshold
+    locomotion_mask = df_encoder[speed_col] > locomotion_threshold
+
+    # Create figure
+    fig, axs = plt.subplots(3, 1, figsize=(12, 8), sharex=False)
+    fig.suptitle(session_name)
+    
+    # Calculate x-axis time range based on number of frames in meso_df captured at 50 fps (20 ms exposure)
+    meso_x_range = int(len(df_fluorescence[fluorescence_x]) / 50)
+    # Calculate pupil x-axis time range based on number of frames in pupil_df captured at 30 fps 
+    pupil_x_range = len(df_pupil) - (meso_x_range - int(len(df_pupil)/30)) * 30
+    pupil_time_axis = np.arange(0, len(df_pupil['pupil_diameter_mm'])/30, 1/30)
+    # Create an array for x ticks at 20-second intervals
+    meso_time_axis = np.arange(0, len(df_fluorescence[fluorescence_x])/50, 1/50)
+    
+    # Create x-ticks at 20-second intervals; note that the x-axis is in seconds now.
+    total_seconds = meso_time_axis[-1]
+    x_ticks = list(range(0, int(total_seconds) + 20, 60))
+    
+    axs[0].set_xticks(x_ticks)
+    axs[2].set_xticks(x_ticks)
+
+    
+    # -- Top subplot: Fluorescence + shaded locomotion
+    axs[0].plot(
+        meso_time_axis, 
+        df_fluorescence[fluorescence_y], 
+        linestyle='-', 
+        label='Mean Fluorescence'
+    )
+    axs[0].set_ylabel('Mean Fluorescence')
+    axs[0].set_title(f'Fluorescence (with Locomotion Underlay) - {session_name}')
+    axs[0].set_xlim(0,len(df_fluorescence[fluorescence_x]))
+    axs[0].grid(True)
+    axs[0].legend()
+    axs[0].set_xlim(meso_time_axis[1], meso_time_axis[-1])
+    #fig.align_xlabels(axs[:1])
+
+    # Underlay locomotion on top subplot
+    axs[0].fill_between(
+        df_encoder.index, 
+        axs[0].get_ylim()[0], 
+        axs[0].get_ylim()[1],
+        where=locomotion_mask,
+        color='gray',
+        alpha=0.2,
+        label='Locomotion'
+    )
+
+    # -- Second subplot: Speed
+    axs[1].plot(df_encoder.iloc[::downsample].index, 
+                df_encoder.iloc[::downsample][speed_col],
+                linestyle='-',
+                label='Speed (Filtered)')
+    axs[1].set_xlabel('Time (s)')
+    axs[1].set_ylabel('Speed (m/s)')
+    axs[1].set_title(f'Speed - {session_name}')
+    axs[1].grid(True)
+    axs[1].legend()
+
+    # Optionally set x-limit if provided
+    if x_limit is not None:
+        axs[1].set_xlim(x_limit)
+
+    # -- Third subplot: Pupil Diameter
+    axs[2].plot(pupil_time_axis, 
+                df_pupil['pupil_diameter_mm'], 
+                label='Pupil Diameter (mm)', 
+                color='green')
+    axs[2].set_xlabel('Time (s)')
+    axs[2].set_ylabel('Pupil Diameter (mm)')
+    axs[2].set_title(f'Pupil Diameter - {session_name}')
+    axs[2].grid(True)
+    #axs[2].set_xlim = (pupil_time_axis[1], pupil_time_axis[-1])
+    axs[2].legend()
+    
+
+    plt.tight_layout()
+    return plt
 
 def load_frame_metadata(path):
     # Load the JSON Data

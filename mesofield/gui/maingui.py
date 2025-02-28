@@ -72,15 +72,15 @@ class MainWindow(QMainWindow):
                 self.console_widget.show()
     
     def plots(self):
-        import mesofield.processing.plot as data
+        import mesofield.data.plot as data
         dh_md_df, th_md_df = data.load_metadata(self.config_controller.config.bids_dir)
         data.plot_encoder_csv(data.load_wheel_data(self.config_controller.config.bids_dir), data.load_psychopy_data(self.config_controller.config.bids_dir))
         data.plot_stim_times(data.load_psychopy_data(self.config_controller.config.bids_dir))
         data.plot_camera_intervals(dh_md_df, th_md_df)
     
     def metrics(self):
-        import mesofield.processing.plot as data
-        from mesofield.processing.metrics import calculate_metrics
+        import mesofield.data.plot as data
+        from mesofield.data.metrics import calculate_metrics
         wheel_df = data.load_wheel_data(self.config_controller.config.bids_dir)
         stim_df = data.load_psychopy_data(self.config_controller.config.bids_dir)
         metrics_df = calculate_metrics(wheel_df, stim_df)
@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
                 
     def initialize_console(self, cfg):
         """Initialize the IPython console and embed it into the application."""
+        import mesofield.data as data
         # Create an in-process kernel
         self.kernel_manager = QtInProcessKernelManager()
         self.kernel_manager.start_kernel()
@@ -108,6 +109,7 @@ class MainWindow(QMainWindow):
             #'mda': self.acquisition_gui.mda,
             'self': self,
             'config': cfg,
+            'data': data
             # Optional, so you can use 'self' directly in the console
         })
     #----------------------------------------------------------------------------#

@@ -10,6 +10,7 @@
     "protocol": "dev",
     "subject": "TESTER01",
     "session": "01",
-    "task": "test"
+    "task": "test",
+    "psychopy_filename": "CheckerBar_vis_build-v0.8.py"
 }
 
