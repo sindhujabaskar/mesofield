@@ -308,5 +308,19 @@ def query_db(db_file, subject, session):
     else:
         print("Error! Cannot create the database connection.")
 
+
+
+@cli.command()
+@click.option('--yaml_path', default='tests/dev.yaml', help='Path to the YAML config file')
+@click.option('--json_path', default='tests/devsub.json', help='Path to the JSON config file')
+def ipython(yaml_path, json_path):
+    """Load iPython terminal with ExperimentConfig in a dev configuration."""
+    from mesofield.config import ExperimentConfig
+    from IPython import embed
+        
+    config = ExperimentConfig(yaml_path)
+    config.load_parameters(json_path)
+    embed(header='Mesofield ExperimentConfig Terminal. Type `config.` + TAB ', local={'config': config})
+
 if __name__ == "__main__":
     cli()
