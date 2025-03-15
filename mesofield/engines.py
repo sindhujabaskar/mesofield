@@ -34,7 +34,7 @@ class MesoEngine(MDAEngine):
         
     def set_config(self, cfg) -> None:
         self._config: ExperimentConfig = cfg
-        self._encoder: SerialWorker = cfg.encoder
+        self._encoder: SerialWorker = cfg.hardware.encoder
     
     def setup_sequence(self, sequence: useq.MDASequence) -> SummaryMetaV1 | None:
         """Perform setup required before the sequence is executed."""
@@ -131,7 +131,7 @@ class PupilEngine(MDAEngine):
         
     def set_config(self, cfg: 'ExperimentConfig') -> None:
         self._config = cfg
-        self._encoder = cfg.encoder
+        self._encoder = cfg.hardware.encoder
         self._nidaq = cfg.hardware.nidaq
 
     def setup_sequence(self, sequence: useq.MDASequence) -> SummaryMetaV1 | None:

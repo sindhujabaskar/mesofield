@@ -60,10 +60,6 @@ class ExperimentConfig:
         return tuple(cam.core for cam in self.hardware.cameras if hasattr(cam, 'core'))
 
     @property
-    def encoder(self):# -> SerialWorker:
-        return self.hardware.encoder
-
-    @property
     def save_dir(self) -> str:
         return os.path.join(self._save_dir, 'data')
 

@@ -231,7 +231,7 @@ class ConfigController(QWidget):
         elif len(self.mmcores) == 2:        
             thread1.start()
             thread2.start()
-        self.config.encoder.start()
+        self.config.hardware.encoder.start()
         self.recordStarted.emit() # Signals to start the MDA sequence to notify other widgets
 
     def launch_psychopy(self):
