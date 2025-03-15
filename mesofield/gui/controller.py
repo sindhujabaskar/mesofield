@@ -196,7 +196,7 @@ class ConfigController(QWidget):
         """Save the snapped image to the specified directory with a unique filename."""
 
         # Generate a unique filename with a timestamp
-        file_path = self.config._generate_unique_file_path(suffix="snapped", extension="png", bids_type="func")
+        file_path = self.config.make_path(suffix="snapped", extension="png", bids_type="func")
 
         # Save the image as a PNG file using matplotlib
         import matplotlib.pyplot as plt
@@ -216,10 +216,14 @@ class ConfigController(QWidget):
         if len(self.mmcores) == 1:
             pupil_sequence = useq.MDASequence(metadata=self.config.hardware.nidaq.__dict__,
                                             time_plan={"interval": 0, "loops": self.config.num_pupil_frames})
-            thread = threading.Thread(target=self._mmc.run_mda, args=(pupil_sequence,), kwargs={'output': CustomWriter(self.config.pupil_file_path)})
+            thread = threading.Thread(target=self._mmc.run_mda, args=(pupil_sequence,), kwargs={'output': CustomWriter(self.config.make_path("meso", "ome.tiff", bids_type="func"))})
         elif len(self.mmcores) == 2:        
-            thread1 = threading.Thread(target=self._mmc1.run_mda, args=(self.config.meso_sequence,), kwargs={'output': CustomWriter(self.config.meso_file_path)})
-            thread2 = threading.Thread(target=self._mmc2.run_mda, args=(self.config.pupil_sequence,), kwargs={'output': CustomWriter(self.config.pupil_file_path)})
+            thread1 = threading.Thread(target=self._mmc1.run_mda, 
+                                       args=(self.config.meso_sequence,), 
+                                       kwargs={'output': CustomWriter(self.config.make_path("meso", "ome.tiff", bids_type="func"))})
+            thread2 = threading.Thread(target=self._mmc2.run_mda, 
+                                       args=(self.config.pupil_sequence,), 
+                                       kwargs={'output': CustomWriter(self.config.make_path("meso", "ome.tiff", bids_type="func"))})
 
         # Wait for spacebar press if start_on_trigger is True
         if self.config.start_on_trigger == "True":
@@ -295,7 +299,7 @@ class ConfigController(QWidget):
 
         if json_path_input and os.path.isfile(json_path_input):
             try:
-                self.config.load_parameters(json_path_input)
+                self.config.load_json(json_path_input)
                 # Refresh the GUI table
                 # FIXME: This implicitly assumes mmc1 is the Dhyana core with the arduino-switch device
                 self._refresh_config_table()
