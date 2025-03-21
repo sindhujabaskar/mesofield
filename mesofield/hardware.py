@@ -1,7 +1,7 @@
 VALID_BACKENDS = {"micromanager", "opencv"}
 import time
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional, Protocol, Type, ClassVar, runtime_checkable
+from typing import Dict, Any, List, Optional, Type, ClassVar
 import importlib
 import yaml
 import nidaqmx.system
@@ -11,63 +11,17 @@ from pymmcore_plus import CMMCorePlus
 from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.arducam import VideoThread
 from mesofield.io.encoder import SerialWorker
-
-
-@runtime_checkable
-class HardwareDevice(Protocol):
-    """Protocol defining the interface for hardware devices."""
-    
-    device_type: str
-    device_id: str
-    config: Dict[str, Any]
-    
-    def initialize(self) -> None:
-        """Initialize the hardware device."""
-        ...
-    
-    def start(self) -> None:
-        """Start data acquisition or operation."""
-        ...
-    
-    def stop(self) -> None:
-        """Stop data acquisition or operation."""
-        ...
-    
-    def close(self) -> None:
-        """Close and clean up resources."""
-        ...
-    
-    def get_status(self) -> Dict[str, Any]:
-        """Get the current status of the device."""
-        ...
-
-
-@runtime_checkable
-class DataAcquisitionDevice(HardwareDevice, Protocol):
-    """Protocol for devices that acquire data."""
-    
-    data_rate: float  # in Hz
-    
-    def get_data(self) -> Dict[str, Any]:
-        """Get the latest data from the device."""
-        ...
-
-
-@runtime_checkable
-class ControlDevice(HardwareDevice, Protocol):
-    """Protocol for devices that control something."""
-    
-    def set_parameter(self, parameter: str, value: Any) -> None:
-        """Set a parameter on the device."""
-        ...
-    
-    def get_parameter(self, parameter: str) -> Any:
-        """Get a parameter from the device."""
-        ...
+from mesofield.protocols import HardwareDevice, DataAcquisitionDevice, ControlDevice
 
 
 @dataclass
 class Nidaq:
+    """
+    NIDAQ hardware control device.
+    
+    This class implements the ControlDevice protocol via duck typing,
+    providing all the necessary methods and attributes without inheritance.
+    """
     device_name: str
     lines: str
     io_type: str
@@ -103,13 +57,13 @@ class Nidaq:
         print(f"Resetting NI-DAQ device: {self.device_name}")
         nidaqmx.system.Device(self.device_name).reset_device()
 
-    def start(self) -> None:
+    def start(self) -> bool:
         """Start the device."""
-        pass
+        return True
     
-    def stop(self) -> None:
+    def stop(self) -> bool:
         """Stop the device."""
-        pass
+        return True
     
     def close(self) -> None:
         """Close the device."""
@@ -118,6 +72,17 @@ class Nidaq:
     def get_status(self) -> Dict[str, Any]:
         """Get the status of the device."""
         return {"status": "ok"}
+        
+    def set_parameter(self, parameter: str, value: Any) -> bool:
+        """Set a parameter on the device."""
+        if parameter in self.config:
+            self.config[parameter] = value
+            return True
+        return False
+    
+    def get_parameter(self, parameter: str) -> Any:
+        """Get a parameter from the device."""
+        return self.config.get(parameter)
 
 
 class DeviceRegistry:

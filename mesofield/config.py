@@ -152,6 +152,15 @@ class ExperimentConfig:
         # Initialize hardware
         self.hardware = HardwareManager(path)
         
+        # Initialize data manager
+        from mesofield.io.manager import DataManager
+        self.data_manager = DataManager()
+        
+        # Register hardware devices with data manager
+        for device_id, device in self.hardware.devices.items():
+            if hasattr(device, 'device_type') and hasattr(device, 'get_data'):
+                self.data_manager.register_hardware_device(device)
+        
         self.notes: list = []    
 
     def _register_default_parameters(self):
