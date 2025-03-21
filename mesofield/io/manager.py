@@ -172,8 +172,11 @@ class DataManager:
     _instance = None
     
     def __new__(cls, *args, **kwargs):
+    
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super(DataManager, cls).__new__(cls)
+            cls._instance._initialized = False
             cls._instance._initialized = False
         return cls._instance
     
@@ -187,8 +190,20 @@ class DataManager:
             self._queue = queue.Queue()
             self._initialized = True
     
+    
+    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None):
+        if not getattr(self, '_initialized', False):
+            self.loop = loop or asyncio.get_event_loop()
+            self.streams: Dict[str, DataStream] = {}
+            self.lock = threading.Lock()
+            self.consumers: Dict[str, DataConsumer] = {}
+            # Legacy queue support for backward compatibility
+            self._queue = queue.Queue()
+            self._initialized = True
+    
     @property
     def data_queue(self):
+        """Legacy queue access for backward compatibility."""
         """Legacy queue access for backward compatibility."""
         return self._queue
     
