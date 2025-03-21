@@ -8,10 +8,17 @@ from typing import Dict, Any, Optional, ClassVar
 
 from mesofield.io import DataManager
 
+# We're not importing DataAcquisitionDevice directly to avoid metaclass conflicts
+# SerialWorker will implement the protocol through duck typing instead
+
 class SerialWorker(QThread):
     """
     SerialWorker is a QThread subclass responsible for handling encoder data through two modes:
     development mode (generating simulated data) or serial mode (reading a real serial port).
+    
+    This class implements the DataAcquisitionDevice protocol through duck typing,
+    providing all the necessary methods and attributes without direct inheritance.
+    This approach avoids metaclass conflicts while still enabling usage with the DataManager.
 
     Signals:
     
@@ -19,14 +26,20 @@ class SerialWorker(QThread):
         2. `serialStreamStarted` (pyqtSignal()): Emits when the streaming thread starts running.
         3. `serialStreamStopped` (pyqtSignal()): Emits when the streaming thread stops running.
         4. `serialSpeedUpdated` (pyqtSignal(float, float)): Emits the elapsed time and current speed.
-    
-    Core Methods:
-    
-        `start()`: Initiates the thread and emits serialStreamStarted.
-        `stop()`: Requests the thread interruption, waits for it, and emits serialStreamStopped.
-        `get_data()`: Returns a DataFrame containing stored encoder readings, time, and computed speeds.
-        `process_data(position_change)`: Updates and stores the computed speed using the encoder clicks.
-        `calculate_speed(delta_clicks, delta_time)`: Performs speed calculation in meters/second.
+        
+    Protocol Compliance:
+        
+        This class implements the DataAcquisitionDevice protocol attributes and methods:
+        - device_type: ClassVar[str] - Type of device ("encoder")
+        - device_id: str - Unique identifier for this device
+        - config: Dict[str, Any] - Configuration parameters
+        - data_rate: float - Data acquisition rate in Hz
+        - initialize() - Initialize the device
+        - start() -> bool - Start data acquisition
+        - stop() -> bool - Stop data acquisition
+        - close() - Clean up resources
+        - get_status() -> Dict[str, Any] - Get device status
+        - get_data() -> Any - Get latest data
     """
     
     # ===================== PyQt Signals ===================== #

@@ -1,18 +1,179 @@
 # Mesofield
 
-This is a PyQt application that is designed to interface with scientific hardware through serial connections and [MicroManager](https://micro-manager.org/)
+A hardware management framework for neuroscience instruments that interfaces with scientific hardware through serial connections and [MicroManager](https://micro-manager.org/).
 
-The core of the application is the `ExperimentConfig` class (`mesofield.config.ExperimentConfig`) and the corresponding `ConfigController` widget (`mesofield.gui.widgets.ConfigController`)
+## Overview
 
-`ExperimentConfig` loads hardware configurations via the `mesofield.config.HardwareManager` dataclass which loads a `hardware.yaml` file in the module directory
+The core of the application is the `ExperimentConfig` class (`mesofield.config.ExperimentConfig`) and the corresponding `ConfigController` widget (`mesofield.gui.widgets.ConfigController`). 
 
-All hardware and GUI components inherit the `ExperimentConfig` providing global state access to parameters defining filename, directories, and experimental settings.
+Key features:
+- Standardized hardware device protocols
+- Unified data management system
+- Real-time data acquisition and processing
+- Integration with MicroManager for camera control
+- GUI components for hardware interaction and visualization
 
-The `ConfigController` loads additional parameters to the `ExperimentConfig` instance by passing a JSON file path to the `ExperimentConfig.load_parameters()` method.
+`ExperimentConfig` loads hardware configurations via the `HardwareManager` which parses a `hardware.yaml` file. All hardware and GUI components inherit from the `ExperimentConfig`, providing global state access to parameters defining filenames, directories, and experimental settings.
 
-NOTE: This has only been tested on Windows 10/11. Hardware control features rely on pymmcore-plus and an installation of MicroManager with specific device drivers. 
+NOTE: This has only been tested on Windows 10/11. Hardware control features rely on pymmcore-plus and an installation of MicroManager with specific device drivers.
 
-The GUI components include live views for cameras (with optional pyqtgraph ImageView), encoder velocity pyqtgraphics, buttons for hardware control, and an iPython terminal for access to the backend
+## Core Components
+
+### Hardware Devices
+
+All hardware devices implement the `HardwareDevice` protocol which standardizes how devices are initialized, started, stopped, and monitored. Specialized protocols extend this for specific device types:
+
+- `DataAcquisitionDevice`: For devices that acquire data (e.g., cameras, encoders)
+- `ControlDevice`: For devices that control external hardware (e.g., NI-DAQ, stimulators)
+
+These protocols can be implemented either through direct inheritance or duck typing (for classes that already have inheritance such as Qt classes), providing flexibility in how hardware integrates with the framework.
+
+### Data Management
+
+The `DataManager` provides a centralized system for:
+
+- Registering data producers and consumers
+- Managing data streams from multiple devices
+- Real-time data processing
+- Buffering and accessing data
+
+The GUI components include live views for cameras (with optional pyqtgraph ImageView), encoder velocity plots, buttons for hardware control, and an iPython terminal for access to the backend.
+
+## Creating Custom Hardware Instruments
+
+To create a custom hardware device for use with Mesofield, implement the appropriate protocol:
+
+```python
+from dataclasses import dataclass
+from typing import Dict, Any, ClassVar
+from mesofield.protocols import DataAcquisitionDevice
+
+@dataclass
+class MyCustomSensor(DataAcquisitionDevice):
+    # Required properties for HardwareDevice protocol
+    device_type: ClassVar[str] = "my_sensor"
+    device_id: str
+    config: Dict[str, Any]
+    
+    # Required property for DataAcquisitionDevice protocol
+    data_rate: float = 1.0  # Hz
+    
+    # Your custom properties
+    custom_property: str = "default"
+    
+    def initialize(self) -> None:
+        """Initialize your hardware device."""
+        pass
+    
+    def start(self) -> bool:
+        """Start data acquisition."""
+        return True
+    
+    def stop(self) -> bool:
+        """Stop data acquisition."""
+        return True
+    
+    def close(self) -> None:
+        """Clean up resources."""
+        pass
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Return device status."""
+        return {"status": "ok"}
+    
+    def get_data(self) -> Any:
+        """Get data from your device."""
+        return {"data": "your_data_here"}
+```
+
+See `example_device.py` for a more complete example.
+
+## Integration
+
+To use your custom device with Mesofield:
+
+1. Create your device class implementing one of the hardware protocols
+2. Add your device configuration to your hardware.yaml file
+3. Register your device class with the DeviceRegistry
+4. The HardwareManager will load and initialize your device
+5. The DataManager will automatically register compatible devices for data streaming
+
+## Example Usage
+
+```python
+from mesofield.config import ExperimentConfig
+from mesofield.example_device import create_temperature_sensor
+
+# Initialize from config file
+config = ExperimentConfig("hardware.yaml")
+
+# Access hardware devices
+encoder = config.hardware.encoder
+camera = config.hardware.Dhyana
+
+# Create and register a custom device
+sensor = create_temperature_sensor("temp1")
+config.hardware.devices["temp1"] = sensor
+config.data_manager.register_hardware_device(sensor)
+
+# Start data acquisition
+config.data_manager.start_all()
+
+# Get data from specific device
+encoder_data = config.data_manager.get_latest_data("encoder_dev")
+temp_data = config.data_manager.get_latest_data("temp1")
+
+# Get all data of a specific type
+all_sensor_data = config.data_manager.get_data_by_type("temperature_sensor")
+
+# Stop acquisition
+config.data_manager.stop_all()
+```
+
+## Threading Models Support
+
+Mesofield supports multiple threading models for hardware devices:
+
+1. **Qt-based (QThread)**: For GUI applications using PyQt
+2. **Thread-based**: Using Python's standard threading library
+3. **Asyncio-based**: For asynchronous programming
+
+Example implementations for each model are provided to simplify integration with different types of hardware devices and applications:
+
+```python
+# QThread-based device implementation (works with GUI applications)
+from PyQt6.QtCore import QThread, pyqtSignal
+
+class MyQtSensor(QThread):
+    # Implement protocol through duck typing
+    device_type = "sensor"
+    device_id = "qt_sensor"
+    
+    # Add device methods
+    def get_data(self):
+        return {"reading": 42}
+    
+    # Define QThread methods
+    def run(self):
+        # QThread implementation
+        pass
+
+# Standard threading device implementation
+from mesofield.mixins import ThreadingHardwareDeviceMixin
+
+class MyThreadingSensor(ThreadingHardwareDeviceMixin):
+    device_type = "sensor"
+    device_id = "thread_sensor"
+    
+    def get_data(self):
+        return {"reading": 42}
+    
+    def _run(self):
+        # Threading implementation
+        pass
+```
+
+See `threading_example.py` for complete examples.
 
 # Setting Up Mesofield in Visual Studio Code
 
