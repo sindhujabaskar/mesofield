@@ -4,6 +4,7 @@ import math
 from queue import Queue
 import serial
 from PyQt6.QtCore import pyqtSignal, QThread
+from typing import Dict, Any, Optional, ClassVar
 
 from mesofield.io import DataManager
 
@@ -34,7 +35,11 @@ class SerialWorker(QThread):
     serialStreamStopped = pyqtSignal() # Emits when the streaming thread stops running
     serialSpeedUpdated = pyqtSignal(float, float) # Emits the elapsed time (float) and current speed (float)
     # ======================================================== #
-
+    
+    # Hardware device interface properties
+    device_type: ClassVar[str] = "encoder"
+    data_rate: float = 0.0  # Will be calculated from sample_interval_ms
+    
     def __init__(self, 
                  serial_port: str, 
                  baud_rate: int, 
@@ -46,14 +51,44 @@ class SerialWorker(QThread):
         super().__init__()
 
         self.development_mode = development_mode
+        self.device_id = f"encoder_{serial_port}" if not development_mode else "encoder_dev"
+        
+        # Create config dictionary for protocol compliance
+        self.config = {
+            "serial_port": serial_port,
+            "baud_rate": baud_rate,
+            "sample_interval_ms": sample_interval,
+            "wheel_diameter": wheel_diameter,
+            "cpr": cpr,
+            "development_mode": development_mode
+        }
 
         self.serial_port = serial_port
         self.baud_rate = baud_rate
         self.sample_interval_ms = sample_interval
         self.diameter_mm = wheel_diameter
         self.cpr = cpr
+        
+        # Calculate data rate in Hz from sample interval
+        self.data_rate = 1000.0 / sample_interval if sample_interval > 0 else 50.0
 
         self.init_data()
+        
+    def initialize(self) -> None:
+        """Initialize the device. Required for HardwareDevice protocol."""
+        self.init_data()
+        
+    def close(self) -> None:
+        """Close the device. Required for HardwareDevice protocol."""
+        self.stop()
+        
+    def get_status(self) -> Dict[str, Any]:
+        """Get device status. Required for HardwareDevice protocol."""
+        return {
+            "active": self.isRunning(),
+            "data_rate": self.data_rate,
+            "development_mode": self.development_mode
+        }
 
 
     def init_data(self):
