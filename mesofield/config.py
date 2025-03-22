@@ -3,36 +3,13 @@ import json
 import warnings
 import datetime
 import pathlib
-from typing import Dict, Any, List, Optional, Type, TypeVar, Protocol, Callable
-from abc import ABC, abstractmethod
+from typing import Dict, Any, List, Optional, Type, TypeVar, Callable
 
 import pandas as pd
 import useq
 
 from mesofield.hardware import HardwareManager
 
-# Define configuration interface
-class Configurator(Protocol):
-    """Protocol defining the interface for configuration providers."""
-    def get(self, key: str, default: Any = None) -> Any:
-        """Retrieve a configuration value for the given key."""
-        ...
-    
-    def set(self, key: str, value: Any) -> None:
-        """Set a configuration value for the given key."""
-        ...
-    
-    def has(self, key: str) -> bool:
-        """Check if the configuration contains the given key."""
-        ...
-    
-    def keys(self) -> List[str]:
-        """Get all configuration keys."""
-        ...
-    
-    def items(self) -> Dict[str, Any]:
-        """Get all configuration key-value pairs."""
-        ...
 
 T = TypeVar('T')
 

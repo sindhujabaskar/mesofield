@@ -11,7 +11,7 @@ from pymmcore_plus import CMMCorePlus
 from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.arducam import VideoThread
 from mesofield.io.encoder import SerialWorker
-from mesofield.protocols import HardwareDevice, DataAcquisitionDevice, ControlDevice
+from mesofield.protocols import HardwareDevice
 
 
 @dataclass
@@ -133,7 +133,7 @@ class HardwareManager:
         for device in self.devices.values():
             try:
                 device.stop()
-                device.close()
+                device.shutdown()
             except Exception as e:
                 print(f"Error shutting down device: {e}")
         
@@ -327,8 +327,8 @@ class HardwareManager:
     def close_all(self) -> None:
         """Close all devices."""
         for device in self.devices.values():
-            if hasattr(device, 'close'):
-                device.close()
+            if hasattr(device, 'shutdown'):
+                device.shutdown()
     
     # Backward compatibility methods
     def get_camera(self, camera_id: str) -> Optional[Any]:

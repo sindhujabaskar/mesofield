@@ -37,6 +37,65 @@ T = TypeVar('T')
 # and documentation, but should not be used for inheritance with classes that
 # already have a metaclass (like QThread)
 
+class Procedure(Protocol):
+    """Protocol defining the standard interface for experiment procedures."""
+    
+    experiment_id: str
+    experimentor: str
+    hardware_yaml: str
+    data_dir: str
+    
+    def initialize_hardware(self) -> bool:
+        """Setup the experiment procedure.
+        
+        Returns:
+            bool: True if setup was successful, False otherwise.
+        """
+    
+    def setup_configuration(self, json_config: str) -> None:
+        """Set up the configuration for the experiment procedure.
+        
+        Args:
+            json_config: Path to a JSON configuration file (.json)
+        """
+        ...    
+        
+    def run(self) -> None:
+        """Run the experiment procedure."""
+        ...
+        
+    def save_data(self) -> None:
+        """Save data from the experiment."""
+        ...
+        
+    def cleanup(self) -> None:
+        """Clean up after the experiment procedure."""
+        ...
+
+# Define configuration interface
+class Configurator(Protocol):
+    """Protocol defining the interface for configuration providers."""
+    def get(self, key: str, default: Any = None) -> Any:
+        """Retrieve a configuration value for the given key."""
+        ...
+    
+    def set(self, key: str, value: Any) -> None:
+        """Set a configuration value for the given key."""
+        ...
+    
+    def has(self, key: str) -> bool:
+        """Check if the configuration contains the given key."""
+        ...
+    
+    def keys(self) -> List[str]:
+        """Get all configuration keys."""
+        ...
+    
+    def items(self) -> Dict[str, Any]:
+        """Get all configuration key-value pairs."""
+        ...
+
+
 @runtime_checkable
 class HardwareDevice(Protocol):
     """Protocol defining the standard interface for all hardware devices."""
@@ -45,9 +104,41 @@ class HardwareDevice(Protocol):
     device_id: str
     config: Dict[str, Any]
     
-    def initialize(self) -> None:
-        """Initialize the hardware device."""
+    def initialize(self) -> bool:
+        """Initialize the hardware device.
+        
+        Returns:
+            bool: True if stopped successfully, False otherwise.
+        """
         ...
+    
+    def shutdown(self) -> None:
+        """Close and clean up resources."""
+        ...
+    
+    def status(self) -> Dict[str, Any]:
+        """Get the current status of the device.
+        
+        Returns:
+        
+            Dict[str, Any]: Dictionary containing device status information.
+        """
+        ...
+        
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        """Return metadata about the hardware."""
+        ...
+
+
+
+@runtime_checkable
+class DataProducer(HardwareDevice, Protocol):
+    """Protocol defining the interface for data-producing components."""
+    
+    sampling_rate: float  # in Hz
+    data_type: str
+    is_active: bool
     
     def start(self) -> bool:
         """Start data acquisition or operation.
@@ -65,117 +156,6 @@ class HardwareDevice(Protocol):
         """
         ...
     
-    def close(self) -> None:
-        """Close and clean up resources."""
-        ...
-    
-    def get_status(self) -> Dict[str, Any]:
-        """Get the current status of the device.
-        
-        Returns:
-            Dict[str, Any]: Dictionary containing device status information.
-        """
-        ...
-
-
-@runtime_checkable
-class DataAcquisitionDevice(HardwareDevice, Protocol):
-    """Protocol for devices that acquire data."""
-    
-    data_rate: float  # in Hz
-    
-    def get_data(self) -> Any:
-        """Get the latest data from the device.
-        
-        Returns:
-            Any: The latest data from the device.
-        """
-        ...
-
-
-@runtime_checkable
-class ControlDevice(HardwareDevice, Protocol):
-    """Protocol for devices that control something."""
-    
-    def set_parameter(self, parameter: str, value: Any) -> bool:
-        """Set a parameter on the device.
-        
-        Args:
-            parameter: Name of the parameter to set.
-            value: Value to set the parameter to.
-            
-        Returns:
-            bool: True if parameter was set successfully, False otherwise.
-        """
-        ...
-    
-    def get_parameter(self, parameter: str) -> Any:
-        """Get a parameter from the device.
-        
-        Args:
-            parameter: Name of the parameter to get.
-            
-        Returns:
-            Any: Value of the parameter.
-        """
-        ...
-
-# Helper functions for protocol checking
-
-def is_hardware_device(obj) -> bool:
-    """Check if an object implements the HardwareDevice interface."""
-    required_attrs = ['device_id', 'device_type', 'config', 'initialize', 
-                     'start', 'stop', 'close', 'get_status']
-    return all(hasattr(obj, attr) for attr in required_attrs)
-
-def is_data_acquisition_device(obj) -> bool:
-    """Check if an object implements the DataAcquisitionDevice interface."""
-    if not is_hardware_device(obj):
-        return False
-    return hasattr(obj, 'data_rate') and hasattr(obj, 'get_data')
-
-def is_control_device(obj) -> bool:
-    """Check if an object implements the ControlDevice interface."""
-    if not is_hardware_device(obj):
-        return False
-    return hasattr(obj, 'set_parameter') and hasattr(obj, 'get_parameter')
-
-
-@runtime_checkable
-class DataProducer(Protocol):
-    """Protocol defining the interface for data-producing components."""
-    
-    @property
-    def name(self) -> str:
-        """Return the name of the data producer."""
-        ...
-    
-    @property
-    def producer_type(self) -> str:
-        """Return the type of data this producer generates."""
-        ...
-    
-    @property
-    def is_active(self) -> bool:
-        """Return whether the data producer is actively producing data."""
-        ...
-    
-    def start(self) -> bool:
-        """Start data production.
-        
-        Returns:
-            bool: True if production started successfully, False otherwise.
-        """
-        ...
-    
-    def stop(self) -> bool:
-        """Stop data production.
-        
-        Returns:
-            bool: True if production stopped successfully, False otherwise.
-        """
-        ...
-    
     def get_data(self) -> Optional[Any]:
         """Get the latest data from the producer.
         
@@ -184,10 +164,7 @@ class DataProducer(Protocol):
         """
         ...
     
-    @property
-    def metadata(self) -> Dict[str, Any]:
-        """Return metadata about the data producer and its output."""
-        ...
+
 
 
 @runtime_checkable
@@ -200,7 +177,7 @@ class DataConsumer(Protocol):
         ...
     
     @property
-    def accepted_data_types(self) -> List[str]:
+    def get_supported_data_types(self) -> List[str]:
         """Return the types of data this consumer can process."""
         ...
     
@@ -215,3 +192,20 @@ class DataConsumer(Protocol):
             bool: True if data was processed successfully, False otherwise.
         """
         ...
+        
+        
+# Helper functions for protocol checking
+
+def is_hardware_device(obj) -> bool:
+    """Check if an object implements the HardwareDevice interface."""
+    required_attrs = ['device_id', 'device_type', 'config', 'initialize', 
+                     'start', 'stop', 'close', 'get_status']
+    return all(hasattr(obj, attr) for attr in required_attrs)
+
+def is_data_acquisition_device(obj) -> bool:
+    """Check if an object implements the DataAcquisitionDevice interface."""
+    if not is_hardware_device(obj):
+        return False
+    return hasattr(obj, 'data_rate') and hasattr(obj, 'get_data')
+
+
