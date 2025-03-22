@@ -393,11 +393,13 @@ class ExperimentConfig:
             print(f"Error saving encoder data: {e}")
             
     def save_configuration(self):
-        """ Save the configuration parameters to a CSV file """
+        """ Save the configuration parameters from the registry to a CSV file """
         params_path = self.make_path(suffix="configuration", extension="csv")
         try:
-            params = self.list_parameters()
-            params.to_csv(params_path, index=False)
+            # Get all parameters from the registry
+            registry_items = self._registry.items()
+            params_df = pd.DataFrame(list(registry_items.items()), columns=['Parameter', 'Value'])
+            params_df.to_csv(params_path, index=False)
             print(f"Configuration saved to {params_path}")
         except Exception as e:
             print(f"Error saving configuration: {e}")
