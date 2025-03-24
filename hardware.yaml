@@ -4,13 +4,9 @@ blue_led_power_mw: "8.2"
 violet_led_power_mw: "4.2"
 
 encoder:
-  type: "wheel"
-  port: "COM4"
-  baudrate: 57600
-  cpr: 2400
-  diameter_mm: 80
-  sample_interval_ms: 20
-  development_mode: False
+  type: "treadmill"
+  port: "COM6"
+  baudrate: 192000
 
 cameras:
   - id: "Dhyana"
@@ -40,7 +36,7 @@ cameras:
       ThorCam:
         Exposure: 20
         fps: 30 # IMPORTANT: This is validated externally and is a value used merely to calculate experiment duration and frames to capture
-        ROI: [440, 305, 509, 509]
+        #ROI: [440, 305, 509, 509]
         viewer_type: "static"
 
 

@@ -9,7 +9,7 @@ class EncoderWidget(QWidget):
     def __init__(self, cfg):
         super().__init__()
         self.config = cfg
-        self.encoder: encoder = cfg.hardware.encoder
+        self.encoder = cfg.hardware.encoder
         self.init_ui()
         self.init_data()
         self.setFixedHeight(300)
@@ -19,7 +19,7 @@ class EncoderWidget(QWidget):
 
         # Status label to show connection status
         self.status_label = QLabel("Click 'Start Live View' to begin.")
-        self.info_label = QLabel(f'Viewing data from {self.encoder} at Port: {self.encoder.serial_port} | Baud: {self.encoder.baud_rate} | CPR: {self.encoder.cpr} | Diameter (mm): {self.encoder.diameter_mm}')
+        self.info_label = QLabel(f'Viewing data from {self.encoder} at Port: {self.encoder.serial_port} | Baud: {self.encoder.baud_rate}')
         self.start_button = QPushButton("Start Live View")
         self.start_button.setCheckable(True)
         self.plot_widget = pg.PlotWidget()
@@ -70,7 +70,7 @@ class EncoderWidget(QWidget):
 
     def receive_speed_data(self, time, speed):
         self.times.append(time)
-        self.speeds.append(speed)
+        self.speeds.append(speed/100)
         # Keep only the last 100 data points
         self.times = self.times[-100:]
         self.speeds = self.speeds[-100:]

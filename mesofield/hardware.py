@@ -11,6 +11,7 @@ from pymmcore_plus import CMMCorePlus
 from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.arducam import VideoThread
 from mesofield.io.encoder import SerialWorker
+from mesofield.io.treadmill import EncoderSerialInterface
 from mesofield.protocols import HardwareDevice
 
 
@@ -177,14 +178,21 @@ class HardwareManager:
         """Initialize encoder device from YAML configuration."""
         if self.yaml.get("encoder"):
             params = self.yaml.get("encoder")
-            self.encoder = SerialWorker(
-                serial_port=params.get('port'),
-                baud_rate=params.get('baudrate'),
-                sample_interval=params.get('sample_interval_ms'),
-                wheel_diameter=params.get('diameter_mm'),
-                cpr=params.get('cpr'),
-                development_mode=params.get('development_mode')
-            )
+            if params.get('type') == 'wheel':
+                self.encoder = SerialWorker(
+                    serial_port=params.get('port'),
+                    baud_rate=params.get('baudrate'),
+                    sample_interval=params.get('sample_interval_ms'),
+                    wheel_diameter=params.get('diameter_mm'),
+                    cpr=params.get('cpr'),
+                    development_mode=params.get('development_mode')
+                )
+            elif params.get('type') == 'treadmill':
+                self.encoder = EncoderSerialInterface(
+                    port=params.get('port'),
+                    baudrate=params.get('baudrate'),
+                    data_callback=None
+                )
             self.devices["encoder"] = self.encoder
          
          

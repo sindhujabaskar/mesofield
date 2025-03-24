@@ -172,8 +172,6 @@ class DataManager:
     _instance = None
     
     def __new__(cls, *args, **kwargs):
-    
-    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super(DataManager, cls).__new__(cls)
             cls._instance._initialized = False
@@ -200,12 +198,7 @@ class DataManager:
             # Legacy queue support for backward compatibility
             self._queue = queue.Queue()
             self._initialized = True
-    
-    @property
-    def data_queue(self):
-        """Legacy queue access for backward compatibility."""
-        """Legacy queue access for backward compatibility."""
-        return self._queue
+
     
     def register_producer(self, producer: DataProducer, buffer_size: int = 1000) -> bool:
         """Register a data producer with the manager.
