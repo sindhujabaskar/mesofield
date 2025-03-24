@@ -149,7 +149,7 @@ class ExperimentConfig:
         self._registry.register("start_on_trigger", False, bool, "Whether to start acquisition on trigger", "hardware")
         self._registry.register("duration", 60, int, "Sequence duration in seconds", "experiment")
         self._registry.register("trial_duration", None, int, "Trial duration in seconds", "experiment")
-        self._registry.register("led_pattern", ['4', '4', '2', '2'], list, "LED pattern sequence", "hardware")
+        self._registry.register("led_pattern", ['4', '4'], list, "LED pattern sequence", "hardware")
         self._registry.register("psychopy_filename", "experiment.py", str, "PsychoPy experiment filename", "experiment")
 
     @property
@@ -331,18 +331,18 @@ class ExperimentConfig:
         """
         try:
             with open(file_path, 'r') as f:
-                return json.load(f)
+                self._parameters = json.load(f)
         except FileNotFoundError:
             print(f"File not found: {file_path}")
-            return {}
+            return 
         except json.JSONDecodeError as e:
             print(f"Error decoding JSON: {e}")
-            return {}
+            return 
             
         self._json_file_path = file_path #store the json filepath
         
         # Update the registry and legacy parameters
-        for key, value in params.items():
+        for key, value in self._parameters.items():
             self._registry.set(key, value)
             self._parameters[key] = value  # NOTE: For backward compatibility
                 
