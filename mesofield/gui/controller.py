@@ -211,6 +211,7 @@ class ConfigController(QWidget):
         from mesofield.io import CustomWriter
         import threading
         import useq
+        import time
         # TODO: Add a check for the MDA sequence and pupil sequence
         # TODO: Fix this ugly logic :)
         if len(self.mmcores) == 1:
@@ -234,6 +235,7 @@ class ConfigController(QWidget):
             thread.start()
         elif len(self.mmcores) == 2:        
             thread1.start()
+            time.sleep(0.1)
             thread2.start()
         self.config.hardware.encoder.start()
         self.recordStarted.emit() # Signals to start the MDA sequence to notify other widgets

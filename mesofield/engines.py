@@ -201,7 +201,7 @@ class PupilEngine(MDAEngine):
                     )
                     count += 1
                 else:
-                    if count == n_events:
+                    if count == n_events or self._mmc1.isSequenceRunning() is not True:
                         logging.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
                         self._mmc.stopSequenceAcquisition() 
                         break
