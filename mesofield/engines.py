@@ -43,7 +43,6 @@ class MesoEngine(MDAEngine):
         self._mmc.getPropertyObject('Arduino-Switch', 'State').startSequence()
 
         logging.info(f'{self.__str__()} setup_sequence loaded LED sequence at time: {time.time()}')
-        self._encoder.set_save_dir(self._config.make_path('treadmill_data', 'csv', 'beh'))
 
         print('Arduino loaded')
         return super().setup_sequence(sequence)
@@ -113,8 +112,8 @@ class MesoEngine(MDAEngine):
         # Stop the Arduino LED Sequence
         self._mmc.getPropertyObject('Arduino-Switch', 'State').stopSequence()
         # Stop the SerialWorker collecting encoder data
-        self._encoder.stop()
-        self._encoder.shutdown()
+        self._encoder.stop_recording()
+        # self._encoder.shutdown()
         # Get and store the encoder data
         # self._wheel_data = self._encoder.get_data()
         # self._config.save_wheel_encoder_data(self._wheel_data)

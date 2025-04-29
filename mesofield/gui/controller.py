@@ -231,13 +231,14 @@ class ConfigController(QWidget):
             self.launch_psychopy()
             self.show_popup()
 
+        self.config.hardware.encoder.start_recording(self.config.make_path('treadmill_data', 'csv', 'beh'))
         if len(self.mmcores) == 1:
             thread.start()
         elif len(self.mmcores) == 2:        
             thread1.start()
-            time.sleep(0.1)
+            time.sleep(0.5)
             thread2.start()
-        self.config.hardware.encoder.start()
+
         self.recordStarted.emit() # Signals to start the MDA sequence to notify other widgets
 
     def launch_psychopy(self):

@@ -3,13 +3,12 @@ import pyqtgraph as pg
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from mesofield.io import SerialWorker
+    from mesofield.config import ExperimentConfig
 
 class EncoderWidget(QWidget):
-    def __init__(self, cfg):
+    def __init__(self, cfg: 'ExperimentConfig'):
         super().__init__()
         self.config = cfg
-        self.encoder = cfg.hardware.encoder
         self.init_ui()
         self.init_data()
         self.setFixedHeight(300)
@@ -19,7 +18,7 @@ class EncoderWidget(QWidget):
 
         # Status label to show connection status
         self.status_label = QLabel("Click 'Start Live View' to begin.")
-        self.info_label = QLabel(f'Viewing data from {self.encoder} at Port: {self.encoder.serial_port} | Baud: {self.encoder.baud_rate}')
+        self.info_label = QLabel(f'Viewing data from {self.config.hardware.encoder} at Port: {self.config.hardware.encoder.serial_port} | Baud: {self.config.hardware.encoder.baud_rate}')
         self.start_button = QPushButton("Start Live View")
         self.start_button.setCheckable(True)
         self.plot_widget = pg.PlotWidget()
@@ -46,7 +45,7 @@ class EncoderWidget(QWidget):
         # self.encoder.serialStreamStarted.connect(self.start_live_view)
         # self.encoder.serialDataReceived.connect(self.process_data)
         # self.encoder.serialStreamStopped.connect(self.stop_timer)
-        self.encoder.serialSpeedUpdated.connect(self.receive_speed_data) 
+        self.config.hardware.encoder.serialSpeedUpdated.connect(self.receive_speed_data) 
         #========================================================================================#
 
     def init_data(self):
@@ -58,15 +57,17 @@ class EncoderWidget(QWidget):
 
     def toggle_serial_thread(self):
         if self.start_button.isChecked():
-            self.encoder.start()
+            # Create a new encoder instance each time before starting the thread
+            self.config.hardware.encoder.serialSpeedUpdated.connect(self.receive_speed_data)
+            self.config.hardware.encoder.start()
             self.status_label.setText("Serial thread started.")
         else:
             self.stop_serial_thread()
             self.status_label.setText("Serial thread stopped.")
 
     def stop_serial_thread(self):
-        if self.encoder is not None:
-            self.encoder.stop()
+        if self.config.hardware.encoder is not None:
+            self.config.hardware.encoder.serialSpeedUpdated.disconnect()
 
     def receive_speed_data(self, time, speed):
         self.times.append(time)
