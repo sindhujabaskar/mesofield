@@ -1,26 +1,46 @@
 VALID_BACKENDS = {"micromanager", "opencv"}
 import time
 from dataclasses import dataclass
-import nidaqmx.system
+from typing import Dict, Any, List, Optional, Type, ClassVar
+import importlib
 import yaml
-
+import nidaqmx.system
 import nidaqmx
 from pymmcore_plus import CMMCorePlus
-
 
 from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.arducam import VideoThread
 from mesofield.io.encoder import SerialWorker
-
-from typing import TYPE_CHECKING
-#if TYPE_CHECKING:
+from mesofield.io.treadmill import EncoderSerialInterface
+from mesofield.protocols import HardwareDevice
 
 
 @dataclass
 class Nidaq:
+    """
+    NIDAQ hardware control device.
+    
+    This class implements the ControlDevice protocol via duck typing,
+    providing all the necessary methods and attributes without inheritance.
+    """
     device_name: str
     lines: str
     io_type: str
+    device_type: ClassVar[str] = "nidaq"
+    device_id: str = "nidaq"
+    config: Dict[str, Any] = None
+
+    def __post_init__(self):
+        if self.config is None:
+            self.config = {
+                "device_name": self.device_name,
+                "lines": self.lines,
+                "io_type": self.io_type
+            }
+
+    def initialize(self) -> None:
+        """Initialize the device."""
+        pass
 
     def test_connection(self):
         print(f"Testing connection to NI-DAQ device: {self.device_name}")
@@ -38,7 +58,51 @@ class Nidaq:
         print(f"Resetting NI-DAQ device: {self.device_name}")
         nidaqmx.system.Device(self.device_name).reset_device()
 
+    def start(self) -> bool:
+        """Start the device."""
+        return True
+    
+    def stop(self) -> bool:
+        """Stop the device."""
+        return True
+    
+    def close(self) -> None:
+        """Close the device."""
+        pass
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get the status of the device."""
+        return {"status": "ok"}
+        
+    def set_parameter(self, parameter: str, value: Any) -> bool:
+        """Set a parameter on the device."""
+        if parameter in self.config:
+            self.config[parameter] = value
+            return True
+        return False
+    
+    def get_parameter(self, parameter: str) -> Any:
+        """Get a parameter from the device."""
+        return self.config.get(parameter)
 
+
+class DeviceRegistry:
+    """Registry for device classes."""
+    
+    _registry: Dict[str, Type[Any]] = {}
+    
+    @classmethod
+    def register(cls, device_type: str) -> callable:
+        """Register a device class for a specific device type."""
+        def decorator(device_class: Type[Any]) -> Type[Any]:
+            cls._registry[device_type] = device_class
+            return device_class
+        return decorator
+    
+    @classmethod
+    def get_class(cls, device_type: str) -> Optional[Type[Any]]:
+        """Get the device class for a specific device type."""
+        return cls._registry.get(device_type)
 
 
 class HardwareManager:
@@ -48,28 +112,38 @@ class HardwareManager:
     """
 
     def __init__(self, config_file: str):
+        self.config_file = config_file
+        self.devices: Dict[str, HardwareDevice] = {}
         self.yaml = self._load_hardware_from_yaml(config_file)
         self.cameras: tuple = ()
-        self._viewer = self.yaml['viewer_type']
-        self._initialize_cameras()
-        self._initialize_encoder()
-        self._initialize_daq()
+        self._viewer = self.yaml.get('viewer_type', 'static')
+        self._initialize_devices()
 
     def __repr__(self):
         return (
             "<HardwareManager>\n"
             f"  Cameras: {[cam for cam in self.cameras]}\n"
-            f"  Encoder: {self.encoder}\n"
+            f"  Devices: {list(self.devices.keys())}\n"
             f"  Config: {self.yaml}\n"
-            f"  loaded_keys={list(self.params.keys())}\n"
             "</HardwareManager>"
         )
         
         
     def shutdown(self):
-        self.encoder.stop()
+        """Shutdown all devices."""
+        for device in self.devices.values():
+            try:
+                device.stop()
+                device.shutdown()
+            except Exception as e:
+                print(f"Error shutting down device: {e}")
+        
+        # Legacy support
+        if hasattr(self, 'encoder') and self.encoder:
+            self.encoder.stop()
     
     def _load_hardware_from_yaml(self, path):
+        """Load hardware configuration from a YAML file."""
         params = {}
 
         if not path:
@@ -80,8 +154,14 @@ class HardwareManager:
             
         return params
             
+    def _initialize_devices(self):
+        """Initialize hardware devices from YAML configuration."""
+        self._initialize_cameras()
+        self._initialize_encoder()
+        self._initialize_daq()
 
     def _initialize_daq(self):
+        """Initialize NI-DAQ device from YAML configuration."""
         if self.yaml.get("nidaq"):
             params = self.yaml.get("nidaq")
             self.nidaq = Nidaq(
@@ -89,21 +169,31 @@ class HardwareManager:
                 lines=params.get('lines'),
                 io_type=params.get('io_type')
             )
+            self.devices["nidaq"] = self.nidaq
         else:
             self.nidaq = None
 
             
     def _initialize_encoder(self):
+        """Initialize encoder device from YAML configuration."""
         if self.yaml.get("encoder"):
             params = self.yaml.get("encoder")
-            self.encoder = SerialWorker(
-                serial_port=params.get('port'),
-                baud_rate=params.get('baudrate'),
-                sample_interval=params.get('sample_interval_ms'),
-                wheel_diameter=params.get('diameter_mm'),
-                cpr=params.get('cpr'),
-                development_mode=params.get('development_mode')
-            )
+            if params.get('type') == 'wheel':
+                self.encoder = SerialWorker(
+                    serial_port=params.get('port'),
+                    baud_rate=params.get('baudrate'),
+                    sample_interval=params.get('sample_interval_ms'),
+                    wheel_diameter=params.get('diameter_mm'),
+                    cpr=params.get('cpr'),
+                    development_mode=params.get('development_mode')
+                )
+            elif params.get('type') == 'treadmill':
+                self.encoder = EncoderSerialInterface(
+                    port=params.get('port'),
+                    baudrate=params.get('baudrate'),
+                    data_callback=None
+                )
+            self.devices["encoder"] = self.encoder
          
          
     def _initialize_cameras(self):
@@ -137,7 +227,7 @@ class HardwareManager:
         """
 
         cams = []
-        for camera_config in self.yaml.get("cameras"):
+        for camera_config in self.yaml.get("cameras", []):
             camera_id = camera_config.get("id")
             backend = camera_config.get("backend")
             if backend == "micromanager":
@@ -180,7 +270,9 @@ class HardwareManager:
                 
             cams.append(camera_object)
             setattr(self, camera_id, camera_object)
-            self.cameras = tuple(cams)
+            self.devices[camera_id] = camera_object
+            
+        self.cameras = tuple(cams)
                 
     
     def _get_core_object(self, mm_path, mm_cfg_path):
@@ -220,3 +312,45 @@ class HardwareManager:
             assert cam.backend in VALID_BACKENDS, f"Invalid backend {cam.backend} for camera {cam.id}"
         for cam in self.cam_backends("opencv"):
             assert cam.backend in VALID_BACKENDS, f"Invalid backend {cam.backend} for camera {cam.id}"
+            
+    # Interface methods
+    def get_device(self, device_id: str) -> Optional[HardwareDevice]:
+        """Get a device by its ID."""
+        return self.devices.get(device_id)
+    
+    def get_devices_by_type(self, device_type: str) -> List[HardwareDevice]:
+        """Get all devices of a specific type."""
+        return [dev for dev in self.devices.values() if getattr(dev, 'device_type', None) == device_type]
+    
+    def has_device(self, device_id: str) -> bool:
+        """Check if a device with the given ID exists."""
+        return device_id in self.devices
+    
+    def initialize_all(self) -> None:
+        """Initialize all devices."""
+        for device in self.devices.values():
+            if hasattr(device, 'initialize'):
+                device.initialize()
+    
+    def close_all(self) -> None:
+        """Close all devices."""
+        for device in self.devices.values():
+            if hasattr(device, 'shutdown'):
+                device.shutdown()
+    
+    # Backward compatibility methods
+    def get_camera(self, camera_id: str) -> Optional[Any]:
+        """Get a camera device by its ID."""
+        return self.get_device(camera_id)
+    
+    def get_encoder(self) -> Optional[SerialWorker]:
+        """Get the encoder device."""
+        return self.encoder
+    
+    def has_camera(self) -> bool:
+        """Check if at least one camera device exists."""
+        return len(self.cameras) > 0
+    
+    def has_encoder(self) -> bool:
+        """Check if the encoder device exists."""
+        return hasattr(self, 'encoder') and self.encoder is not None

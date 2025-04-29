@@ -34,7 +34,7 @@ class MesoEngine(MDAEngine):
         
     def set_config(self, cfg) -> None:
         self._config: ExperimentConfig = cfg
-        self._encoder: SerialWorker = cfg.encoder
+        self._encoder = cfg.hardware.encoder
     
     def setup_sequence(self, sequence: useq.MDASequence) -> SummaryMetaV1 | None:
         """Perform setup required before the sequence is executed."""
@@ -43,7 +43,7 @@ class MesoEngine(MDAEngine):
         self._mmc.getPropertyObject('Arduino-Switch', 'State').startSequence()
 
         logging.info(f'{self.__str__()} setup_sequence loaded LED sequence at time: {time.time()}')
-        
+
         print('Arduino loaded')
         return super().setup_sequence(sequence)
     
@@ -112,10 +112,11 @@ class MesoEngine(MDAEngine):
         # Stop the Arduino LED Sequence
         self._mmc.getPropertyObject('Arduino-Switch', 'State').stopSequence()
         # Stop the SerialWorker collecting encoder data
-        self._encoder.stop()
+        self._encoder.stop_recording()
+        # self._encoder.shutdown()
         # Get and store the encoder data
-        self._wheel_data = self._encoder.get_data()
-        self._config.save_wheel_encoder_data(self._wheel_data)
+        # self._wheel_data = self._encoder.get_data()
+        # self._config.save_wheel_encoder_data(self._wheel_data)
         self._config.save_configuration()
         pass
     
@@ -131,14 +132,16 @@ class PupilEngine(MDAEngine):
         
     def set_config(self, cfg: 'ExperimentConfig') -> None:
         self._config = cfg
-        self._encoder = cfg.encoder
+        #self._encoder = cfg.hardware.encoder
         self._nidaq = cfg.hardware.nidaq
+        self._mmc1: CMMCorePlus = cfg._cores[0]
 
     def setup_sequence(self, sequence: useq.MDASequence) -> SummaryMetaV1 | None:
         self.nidaq = sequence.metadata.get("device_name")
         self.lines = sequence.metadata.get("lines")
         self.io_type = sequence.metadata.get("io_type")
-        self._nidaq.reset()
+        if self._nidaq is not None:
+            self._nidaq.reset()
         logging.info(f'{self.__str__()} setup_sequence loaded Nidaq: {self.nidaq} with lines {self.lines} of type: {self.io_type}')
         return super().setup_sequence(sequence)
         
@@ -201,7 +204,7 @@ class PupilEngine(MDAEngine):
                     )
                     count += 1
                 else:
-                    if count == n_events:
+                    if count == n_events or self._mmc1.isSequenceRunning() is not True:
                         logging.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
                         self._mmc.stopSequenceAcquisition() 
                         break
@@ -223,11 +226,11 @@ class PupilEngine(MDAEngine):
     def teardown_sequence(self, sequence: useq.MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
         logging.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
-        self._encoder.stop()
+        #self._encoder.stop()
         # Get and store the encoder data
-        self._wheel_data = self._encoder.get_data()
-        self._config.save_wheel_encoder_data(self._wheel_data)
-        self._config.save_configuration()
+        #self._wheel_data = self._encoder.get_data()
+        #self._config.save_wheel_encoder_data(self._wheel_data)
+        #self._config.save_configuration()
 
         # if self.nidaq is not None and self.io_type == "DO":
         #         with nidaqmx.Task() as task:

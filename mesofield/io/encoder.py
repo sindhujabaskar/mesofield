@@ -4,13 +4,21 @@ import math
 from queue import Queue
 import serial
 from PyQt6.QtCore import pyqtSignal, QThread
+from typing import Dict, Any, Optional, ClassVar
 
 from mesofield.io import DataManager
+
+# We're not importing DataAcquisitionDevice directly to avoid metaclass conflicts
+# SerialWorker will implement the protocol through duck typing instead
 
 class SerialWorker(QThread):
     """
     SerialWorker is a QThread subclass responsible for handling encoder data through two modes:
     development mode (generating simulated data) or serial mode (reading a real serial port).
+    
+    This class implements the DataAcquisitionDevice protocol through duck typing,
+    providing all the necessary methods and attributes without direct inheritance.
+    This approach avoids metaclass conflicts while still enabling usage with the DataManager.
 
     Signals:
     
@@ -18,14 +26,20 @@ class SerialWorker(QThread):
         2. `serialStreamStarted` (pyqtSignal()): Emits when the streaming thread starts running.
         3. `serialStreamStopped` (pyqtSignal()): Emits when the streaming thread stops running.
         4. `serialSpeedUpdated` (pyqtSignal(float, float)): Emits the elapsed time and current speed.
-    
-    Core Methods:
-    
-        `start()`: Initiates the thread and emits serialStreamStarted.
-        `stop()`: Requests the thread interruption, waits for it, and emits serialStreamStopped.
-        `get_data()`: Returns a DataFrame containing stored encoder readings, time, and computed speeds.
-        `process_data(position_change)`: Updates and stores the computed speed using the encoder clicks.
-        `calculate_speed(delta_clicks, delta_time)`: Performs speed calculation in meters/second.
+        
+    Protocol Compliance:
+        
+        This class implements the DataAcquisitionDevice protocol attributes and methods:
+        - device_type: ClassVar[str] - Type of device ("encoder")
+        - device_id: str - Unique identifier for this device
+        - config: Dict[str, Any] - Configuration parameters
+        - data_rate: float - Data acquisition rate in Hz
+        - initialize() - Initialize the device
+        - start() -> bool - Start data acquisition
+        - stop() -> bool - Stop data acquisition
+        - close() - Clean up resources
+        - get_status() -> Dict[str, Any] - Get device status
+        - get_data() -> Any - Get latest data
     """
     
     # ===================== PyQt Signals ===================== #
@@ -34,7 +48,11 @@ class SerialWorker(QThread):
     serialStreamStopped = pyqtSignal() # Emits when the streaming thread stops running
     serialSpeedUpdated = pyqtSignal(float, float) # Emits the elapsed time (float) and current speed (float)
     # ======================================================== #
-
+    
+    # Hardware device interface properties
+    device_type: ClassVar[str] = "encoder"
+    data_rate: float = 0.0  # Will be calculated from sample_interval_ms
+    
     def __init__(self, 
                  serial_port: str, 
                  baud_rate: int, 
@@ -46,14 +64,44 @@ class SerialWorker(QThread):
         super().__init__()
 
         self.development_mode = development_mode
+        self.device_id = f"encoder_{serial_port}" if not development_mode else "encoder_dev"
+        
+        # Create config dictionary for protocol compliance
+        self.config = {
+            "serial_port": serial_port,
+            "baud_rate": baud_rate,
+            "sample_interval_ms": sample_interval,
+            "wheel_diameter": wheel_diameter,
+            "cpr": cpr,
+            "development_mode": development_mode
+        }
 
         self.serial_port = serial_port
         self.baud_rate = baud_rate
         self.sample_interval_ms = sample_interval
         self.diameter_mm = wheel_diameter
         self.cpr = cpr
+        
+        # Calculate data rate in Hz from sample interval
+        self.data_rate = 1000.0 / sample_interval if sample_interval > 0 else 50.0
 
         self.init_data()
+        
+    def initialize(self) -> None:
+        """Initialize the device. Required for HardwareDevice protocol."""
+        self.init_data()
+        
+    def close(self) -> None:
+        """Close the device. Required for HardwareDevice protocol."""
+        self.stop()
+        
+    def get_status(self) -> Dict[str, Any]:
+        """Get device status. Required for HardwareDevice protocol."""
+        return {
+            "active": self.isRunning(),
+            "data_rate": self.data_rate,
+            "development_mode": self.development_mode
+        }
 
 
     def init_data(self):

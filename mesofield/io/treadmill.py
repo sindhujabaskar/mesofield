@@ -29,16 +29,16 @@ Usage Example:
     
     # Run until interrupted...
 """
-
+import os
 import serial
 import time
 import threading
 import logging
+import csv
 from typing import Optional
 from dataclasses import dataclass
 
-# Configure logging for demonstration purposes.
-logging.basicConfig(level=logging.INFO)
+from PyQt6.QtCore import pyqtSignal, QThread
 
 
 @dataclass
@@ -51,163 +51,142 @@ class EncoderData:
         return (f"EncoderData(timestamp={self.timestamp}, "
                 f"distance={self.distance:.3f} mm, speed={self.speed:.3f} mm/s)")
 
-
-class EncoderSerialInterface:
-    """
-    Abstraction for the Teensy serial interface running the EncoderInterfaceT4 firmware.
-
-    This class encapsulates the serial communication and parsing logic, enabling easy
-    integration with other modules that need encoder data.
-
-    Attributes:
-        port (str): The serial port (e.g., '/dev/ttyACM0' or 'COM3').
-        baudrate (int): Serial communication speed (must match firmware, e.g., 192000).
-        ser (serial.Serial): The underlying PySerial instance.
-        data_callback (Optional[callable]): Callback function for new EncoderData.
-    """
+class EncoderSerialInterface(QThread):
+    
+    serialDataReceived = pyqtSignal(object)  # Emits the parsed EncoderData
+    serialStreamStarted = pyqtSignal()         # Emits when streaming starts
+    serialStreamStopped = pyqtSignal()         # Emits when streaming stops
+    serialSpeedUpdated = pyqtSignal(float, float)  # Emits elapsed time and current speed
 
     def __init__(self, port: str, baudrate: int = 192000, data_callback=None):
-        """
-        Initialize the serial interface.
-
-        Args:
-            port (str): Serial port where the Teensy is connected.
-            baudrate (int): Communication speed.
-            data_callback (callable, optional): Function to call with each EncoderData.
-        """
-        self.port = port
-        self.baudrate = baudrate
+        super().__init__()
+        self.logger = logging.getLogger("EncoderSerialInterface")
+        self.serial_port = port
+        self.baud_rate = baudrate
         self.data_callback = data_callback
+        
+        self._recording = False
+        self._recording_file = None
+        self._recorded_data = []
         try:
             self.ser = serial.Serial(port, baudrate, timeout=1)
         except serial.SerialException as e:
-            logging.error("Failed to open serial port %s: %s", port, e)
+            self.logger.error(f"Failed to open serial port {port}: {e}")
             raise
-        self.running = False
-        self.read_thread = None
-        logging.info("EncoderSerialInterface initialized on port %s with baudrate %d",
-                     port, baudrate)
+
+        self.data_saver = None
+        self.logger.info(f"EncoderSerialInterface initialized on port {port} with baudrate {baudrate}")
+
+    def start_recording(self, file_path: str):
+        if not self.isRunning():
+            self.start()
+        if self.isRunning():
+            # Flush the input buffer to discard any backlog of serial data.
+            self.ser.reset_input_buffer()
+            self._recording = True
+            self._recording_file = file_path
+            self._recorded_data = []
+            self.logger.info(f"Recording started. Data will be stored to {file_path}")
+        else:
+            self.logger.warning("Cannot start recording: Serial interface is not running.")
+
+    def stop_recording(self):
+        if self._recording:
+            self._recording = False
+            try:
+                with open(self._recording_file, 'w', newline='') as f:
+                    writer = csv.DictWriter(f, fieldnames=['timestamp', 'distance', 'speed'])
+                    writer.writeheader()
+                    for d in self._recorded_data:
+                        writer.writerow({'timestamp': d.timestamp, 'distance': d.distance, 'speed': d.speed})
+                self.logger.info(f"Recording stopped. Data saved to {self._recording_file}")
+            except Exception as e:
+                self.logger.error(f"Failed to save recorded data: {e}")
+        else:
+            self.logger.warning(f"Recording not active; nothing to stop.")
 
     def start(self):
-        """Start the background thread to read serial data."""
-        self.running = True
-        self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
-        self.read_thread.start()
-        logging.info("Serial read thread started.")
+        self.serialStreamStarted.emit()
+        super().start()
 
     def stop(self):
-        """Stop reading serial data and close the connection."""
-        self.running = False
-        if self.read_thread:
-            self.read_thread.join()
+        self.requestInterruption()
+        self.wait()
         if self.ser.is_open:
             self.ser.close()
-        logging.info("Serial interface stopped and port closed.")
+        self.serialStreamStopped.emit()
+        self.logger.info(f"Serial interface stopped and port closed.")
 
-    def _read_loop(self):
-        """Internal loop for continuously reading lines from the serial port."""
-        while self.running:
+    def run(self):
+        self.logger.info(f"Serial read thread started.")
+        while not self.isInterruptionRequested():
             try:
-                # Read a line from the Teensy board
                 raw_line = self.ser.readline()
                 if not raw_line:
                     continue
-
-                # Decode and strip newline characters
                 line = raw_line.decode('utf-8', errors='replace').strip()
                 if line:
                     data = self._parse_line(line)
-                    if data and self.data_callback:
-                        self.data_callback(data)
+                    if data:
+                        if self.data_callback:
+                            self.data_callback(data)
+                        # Emit signals
+                        self.serialDataReceived.emit(data)
+                        self.serialSpeedUpdated.emit(data.timestamp or 0, data.speed)
+                        # Record data if recording is active.
+                        if self._recording:
+                            self._recorded_data.append(data)
             except serial.SerialException as e:
-                logging.error("Serial error: %s", e)
+                self.logger.error(f"Serial error: {e}")
                 break
             except Exception as ex:
-                logging.error("Unexpected error: %s", ex)
-        logging.info("Exiting serial read loop.")
+                self.logger.error(f"Unexpected error: {ex}")
+        self.logger.info(f"Exiting serial read loop.")
 
     def _parse_line(self, line: str) -> Optional[EncoderData]:
-        """
-        Parse a line of serial output.
-
-        Expected line formats:
-          - "timestamp,distance,speed"  or
-          - "distance,speed"
-
-        Args:
-            line (str): A single line from the serial port.
-
-        Returns:
-            EncoderData: An instance with parsed values, or None if parsing fails.
-        """
         parts = line.split(',')
         try:
             if len(parts) == 3:
-                # Format: timestamp, distance, speed
                 timestamp = int(parts[0].strip())
                 distance = float(parts[1].strip())
                 speed = float(parts[2].strip())
                 return EncoderData(distance=distance, speed=speed, timestamp=timestamp)
             elif len(parts) == 2:
-                # Format: distance, speed
                 distance = float(parts[0].strip())
                 speed = float(parts[1].strip())
                 return EncoderData(distance=distance, speed=speed)
             else:
-                # Likely a header or message line (non-data)
-                logging.debug("Ignored non-data line: %s", line)
+                self.logger.debug(f"Ignored non-data line: {line}")
                 return None
         except ValueError:
-            # Non-numeric data (e.g., header info)
-            logging.debug("Failed to parse line: %s", line)
+            self.logger.debug(f"Failed to parse line: {line}")
             return None
 
     def send_command(self, command: str):
-        """
-        Send a command to the Teensy board.
-
-        The firmware recognizes commands such as:
-          - '?' for version and header information.
-          - 'c' for speed output calibration.
-
-        Args:
-            command (str): A single-character command.
-        """
         if self.ser.is_open:
             self.ser.write(command.encode('utf-8'))
-            logging.info("Sent command: %s", command)
+            self.logger.info(f"Sent command: {command}")
         else:
-            logging.warning("Serial port not open; command not sent.")
+            self.logger.warning(f"Serial port not open; command not sent.")
 
+    def shutdown(self):
+        self.stop()
 
 def main():
     """
     Demonstration of how to use the EncoderSerialInterface.
-    
-    This example:
-      1. Sets up a callback to print each encoder reading.
-      2. Starts the serial reading thread.
-      3. Sends a '?' command to request header information.
-      4. Runs until interrupted by the user.
     """
-
     def process_encoder_data(data: EncoderData):
-        # Process or log the data; here we simply print it.
         print(data)
-
-    # Adjust the port as necessary (e.g., 'COM3' on Windows or '/dev/ttyACM0' on Unix)
+    
     port = 'COM6'
-    encoder_interface = EncoderSerialInterface(port, data_callback=process_encoder_data)
+    encoder_interface = EncoderSerialInterface(port)
     encoder_interface.start()
 
     try:
-        # Send a command to display firmware header/version info
         encoder_interface.send_command('?')
-        # Main loop; in a larger system, replace this with your event loop or integration code.
         while True:
             time.sleep(1)
-    except KeyboardInterrupt:
-        logging.info("Interrupt received, stopping.")
     finally:
         encoder_interface.stop()
 
