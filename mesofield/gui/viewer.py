@@ -181,10 +181,7 @@ class ImagePreview(QWidget):
         ev.exposureChanged.connect(self._on_exposure_changed)
 
         enev = self._mmcore.mda.events
-        enev.frameReady.connect(
-            self._on_frame_ready,
-            type=Qt.ConnectionType.QueuedConnection  # Ensure the slot is called in the main thread
-        )
+        enev.frameReady.connect(self._on_frame_ready)
 
         self.destroyed.connect(self._disconnect)
 
