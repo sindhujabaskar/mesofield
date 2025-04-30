@@ -2,6 +2,8 @@ memory_buffer_size: 10000
 viewer_type: "static"
 blue_led_power_mw: "8.2"
 violet_led_power_mw: "4.2"
+widgets:
+  - psychopy
 
 encoder:
   type: "treadmill"
@@ -26,6 +28,9 @@ cameras:
         Sequence: "On"
       Core:
         Shutter: "Arduino-Shutter"
+    widgets:
+      - led_control
+      - camera_snap
 
   - id: "ThorCam"
     name: "pupil"
@@ -38,6 +43,8 @@ cameras:
         fps: 30 # IMPORTANT: This is validated externally and is a value used merely to calculate experiment duration and frames to capture
         #ROI: [440, 305, 509, 509]
         viewer_type: "static"
+    widgets:
+      - camera_snap
 
 
 

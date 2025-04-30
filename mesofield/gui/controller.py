@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QComboBox,
     QTableWidget,
+    QAbstractItemView,
     QHeaderView,
     QFileDialog,
     QTableWidgetItem,
@@ -22,6 +23,7 @@ from PyQt6.QtWidgets import (
     QDialog,
 )
 from PyQt6.QtGui import QImage, QPixmap
+from .dynamic_controller import DynamicController
 
 
 from typing import TYPE_CHECKING
@@ -125,29 +127,21 @@ class ConfigController(QWidget):
         # 3. Table widget to display the configuration parameters loaded from the JSON
         layout.addWidget(QLabel('Experiment Config:'))
         self.config_table = QTableWidget()
-        self.config_table.setEditTriggers(QTableWidget.AllEditTriggers)
-        self.config_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.config_table.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        self.config_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.config_table)
 
         # 4. Record button to start the MDA sequence
         self.record_button = QPushButton('Record')
         layout.addWidget(self.record_button)
-        
-        # 5. Test LED button to test the LED pattern
-        self.test_led_button = QPushButton("Test LED")
-        layout.addWidget(self.test_led_button)
-        
-        # 6. Stop LED button to stop the LED pattern
-        self.stop_led_button = QPushButton("Stop LED")
-        layout.addWidget(self.stop_led_button)
-        
-        # 7. Add Note button to add a note to the configuration
+
+        # Dynamic hardware-specific controls
+        self.dynamic_controller = DynamicController(cfg, parent=self)
+        layout.addWidget(self.dynamic_controller)
+
+        # 5. Add Note button to add a note to the configuration
         self.add_note_button = QPushButton("Add Note")
         layout.addWidget(self.add_note_button)
-
-        # 7. Add a snap image button for self._mmc1.snap() 
-        self.snap_button = QPushButton("Snap Image")
-        layout.addWidget(self.snap_button)
 
         # ------------------------------------------------------------------------------------- #
 
@@ -157,10 +151,18 @@ class ConfigController(QWidget):
         self.json_dropdown.currentIndexChanged.connect(self._update_config)
         self.config_table.cellChanged.connect(self._on_table_edit)
         self.record_button.clicked.connect(self.record)
-        self.test_led_button.clicked.connect(self._test_led)
-        self.stop_led_button.clicked.connect(self._stop_led)
         self.add_note_button.clicked.connect(self._add_note)
-        self.snap_button.clicked.connect(lambda: self._save_snapshot(self._mmc1.snap()))
+        
+        # Connect dynamic controls using constants defined in DynamicController
+        dynamic_buttons = [
+            (DynamicController.LED_TEST_BTN, self._test_led),
+            (DynamicController.STOP_BTN, self._stop_led),
+            (DynamicController.SNAP_BTN, lambda: self._save_snapshot(self._mmc1.snap())),
+            (DynamicController.PSYCHOPY_BTN, self.launch_psychopy),
+        ]
+        for btn_attr, handler in dynamic_buttons:
+            if hasattr(self.dynamic_controller, btn_attr):
+                getattr(self.dynamic_controller, btn_attr).clicked.connect(handler)
 
         # ------------------------------------------------------------------------------------- #
 

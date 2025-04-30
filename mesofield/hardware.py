@@ -115,6 +115,8 @@ class HardwareManager:
         self.config_file = config_file
         self.devices: Dict[str, HardwareDevice] = {}
         self.yaml = self._load_hardware_from_yaml(config_file)
+        # Build canonical widget list from YAML
+        self.widgets: List[str] = self._aggregate_widgets()
         self.cameras: tuple = ()
         self._viewer = self.yaml.get('viewer_type', 'static')
         self._initialize_devices()
@@ -154,6 +156,26 @@ class HardwareManager:
             
         return params
             
+    def _aggregate_widgets(self) -> List[str]:
+        """
+        Aggregate widget keys from root, camera entries, and encoder into a single list.
+        """
+        widgets: List[str] = []
+        # Global widgets
+        for w in self.yaml.get('widgets', []):
+            if w not in widgets:
+                widgets.append(w)
+        # Camera-specific widgets
+        for cam in self.yaml.get('cameras', []):
+            for w in cam.get('widgets', []):
+                if w not in widgets:
+                    widgets.append(w)
+        # Encoder-specific widgets
+        for w in self.yaml.get('encoder', {}).get('widgets', []):
+            if w not in widgets:
+                widgets.append(w)
+        return widgets
+
     def _initialize_devices(self):
         """Initialize hardware devices from YAML configuration."""
         self._initialize_cameras()
