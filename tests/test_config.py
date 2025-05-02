@@ -8,7 +8,7 @@ import useq
 
 
 from pymmcore_plus import CMMCorePlus
-from mesofield.mmcore import MMConfigurator
+from mesofield.config import ExperimentConfig
 from mesofield.engines import MesoEngine, PupilEngine
 
 
@@ -46,28 +46,12 @@ def core_object():
     return MagicMock(spec=CMMCorePlus)
 
 @pytest.fixture
-def mm_configurator():
-    # Instantiate MMConfigurator
-    mm_config = MMConfigurator(core_parameters, dev=False)
-    return mm_config
-
-def test_initialize(mm_configurator):
-    with patch.object(CMMCorePlus, 'loadSystemConfiguration') as mock_load_config:
-        mmcore1, mmcore2 = mm_configurator.initialize()
-        assert mmcore1 is not None
-        assert mmcore2 is not None
-        assert isinstance(mmcore1, CMMCorePlus)
-        assert isinstance(mmcore2, CMMCorePlus)
-        assert mock_load_config.called
-
-def test_register_engines(mm_configurator):
-    mm_configurator.mmcore1 = MagicMock()
-    mm_configurator.mmcore2 = MagicMock()
-    mm_configurator.register_engines()
-    assert isinstance(mm_configurator.meso_engine, MesoEngine)
-    assert isinstance(mm_configurator.pupil_engine, PupilEngine)
-    mm_configurator.mmcore1.register_mda_engine.assert_called_with(mm_configurator.meso_engine)
-    mm_configurator.mmcore2.register_mda_engine.assert_called_with(mm_configurator.pupil_engine)
+def config(tmp_path, monkeypatch):
+    # Monkey-patch HardwareManager to avoid external dependencies
+    monkeypatch.setattr('mesofield.config.HardwareManager', lambda path: type('HM', (), {'devices': {}, 'cameras': []})())
+    # Instantiate ExperimentConfig with dummy path
+    cfg = ExperimentConfig(str(tmp_path))
+    return cfg
 
 @pytest.fixture
 def mock_json():
@@ -86,22 +70,13 @@ def mock_json_str(mock_json):
     return json.dumps(mock_json)
 
 @patch("builtins.open", new_callable=mock_open)
-def test_experiment_config(mock_file, mock_json, mock_json_str):
+def test_experiment_config(mock_file, config, mock_json, mock_json_str):
     mock_file.return_value.read.return_value = mock_json_str
-
     # Load the config from the mocked JSON file
-    config = ExperimentConfig(mm_configurator)
-    config.load_parameters(json_file_path="config.json")
+    config.load_json("config.json")
 
-    # Test parameters
-    assert config.protocol == mock_json["protocol"]
-    assert config.subject == mock_json["subject"]
-    assert config.session == mock_json["session"]
-    assert config.task == mock_json["task"]
-    assert config.num_meso_frames == mock_json["num_meso_frames"]
-    assert config.num_pupil_frames == mock_json["num_pupil_frames"]
-    assert config.save_dir == os.path.abspath(mock_json["save_dir"])
-
-    # Test methods
+    # All loaded JSON parameters should be in the registry
+    assert config._parameters == mock_json
+    # Generated sequences use useq
     assert isinstance(config.meso_sequence, useq.MDASequence)
     assert isinstance(config.pupil_sequence, useq.MDASequence)

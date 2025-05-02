@@ -1,3 +1,6 @@
+import pytest
+pytest.skip("Skipping hardware-dependent MDA tests", allow_module_level=True)
+
 from pymmcore_plus import CMMCorePlus
 import useq
         
@@ -17,5 +20,5 @@ def test_mmcore_mda():
     
     print(f"getLastImageAndMD Metadata object: {get_metadata}")
     print(F"popNextImageAndMD Metadata object: {pop_metadata}")
-    
-    
+
+
