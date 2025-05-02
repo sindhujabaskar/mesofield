@@ -13,11 +13,10 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QComboBox,
-    QTableWidget,
+    QTableView,
     QAbstractItemView,
     QHeaderView,
     QFileDialog,
-    QTableWidgetItem,
     QMessageBox,
     QInputDialog,
     QDialog,
@@ -30,6 +29,37 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from mesofield.config import ExperimentConfig
     from pymmcore_plus import CMMCorePlus
+
+from PyQt6.QtWidgets import (
+    QFormLayout, QLineEdit, QSpinBox, QCheckBox
+)
+
+from mesofield.gui import ConfigTableModel
+class ConfigFormWidget(QWidget):
+    """Map each config key to an appropriate editor in a form layout."""
+    def __init__(self, registry):
+        super().__init__()
+        self._registry = registry
+        form = QFormLayout(self)
+        # create editor per config key with initial values and two-way binding
+        for key in self._registry.keys():
+            type_hint = self._registry.get_metadata(key).get("type")
+            value = self._registry.get(key)
+            if type_hint is int:
+                editor = QSpinBox()
+                editor.setRange(-1_000_000, 1_000_000)
+                editor.setValue(int(value or 0))
+                editor.valueChanged.connect(lambda val, k=key: self._registry.set(k, val))
+            elif type_hint is bool:
+                editor = QCheckBox()
+                editor.setChecked(bool(value))
+                editor.toggled.connect(lambda checked, k=key: self._registry.set(k, checked))
+            else:
+                editor = QLineEdit()
+                editor.setText(str(value))
+                editor.textChanged.connect(lambda text, k=key: self._registry.set(k, text))
+            form.addRow(key, editor)
+
 
 class ConfigController(QWidget):
     """AcquisitionEngine object for the napari-mesofield plugin.
@@ -64,10 +94,6 @@ class ConfigController(QWidget):
         returns a list of JSON files in the current directory
     _update_config(): 
         updates the experiment configuration from a new JSON file
-    _on_table_edit(): 
-        updates the configuration parameters when the table is edited
-    _refresh_config_table(): 
-        refreshes the configuration table to reflect current parameters
     _test_led(): 
         tests the LED pattern by sending a test sequence to the Arduino-Switch device
     _stop_led(): 
@@ -87,6 +113,9 @@ class ConfigController(QWidget):
         # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
 
         self.config = cfg
+        # Sync registry changes to legacy parameters dict
+        for key in self.config._registry.keys():
+            self.config._registry.register_callback(key, self._on_registry_updated)
         if len(self.mmcores) == 1:
             self._mmc: CMMCorePlus = self.mmcores[0]
         elif len(self.mmcores) == 2:
@@ -124,12 +153,14 @@ class ConfigController(QWidget):
 
         layout.addLayout(json_layout)
 
-        # 3. Table widget to display the configuration parameters loaded from the JSON
+        # 3. Table view to display the configuration parameters loaded from the JSON
         layout.addWidget(QLabel('Experiment Config:'))
-        self.config_table = QTableWidget()
-        self.config_table.setEditTriggers(QAbstractItemView.AllEditTriggers)
-        self.config_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self.config_table)
+        self.config_view = QTableView()
+        self.config_table_model = ConfigTableModel(self.config._registry)
+        self.config_view.setModel(self.config_table_model)
+        self.config_view.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        self.config_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.config_view)
 
         # 4. Record button to start the MDA sequence
         self.record_button = QPushButton('Record')
@@ -143,13 +174,17 @@ class ConfigController(QWidget):
         self.add_note_button = QPushButton("Add Note")
         layout.addWidget(self.add_note_button)
 
+        self.config_model = ConfigFormWidget(self.config._registry)
+        layout.addWidget(self.config_model)
+        #self.config_table.setModel(self.config_model)
         # ------------------------------------------------------------------------------------- #
 
         # ============ Callback connections between widget values and functions ================ #
 
         self.directory_button.clicked.connect(self._select_directory)
         self.json_dropdown.currentIndexChanged.connect(self._update_config)
-        self.config_table.cellChanged.connect(self._on_table_edit)
+        # Emit configUpdated when table model data changes
+        self.config_table_model.dataChanged.connect(lambda *args: self.configUpdated.emit(self.config))
         self.record_button.clicked.connect(self.record)
         self.add_note_button.clicked.connect(self._add_note)
         
@@ -165,9 +200,6 @@ class ConfigController(QWidget):
                 getattr(self.dynamic_controller, btn_attr).clicked.connect(handler)
 
         # ------------------------------------------------------------------------------------- #
-
-        # Initialize the config table
-        self._refresh_config_table()
 
     # ============================== Public Class Methods ============================================ #
 
@@ -305,42 +337,14 @@ class ConfigController(QWidget):
         if json_path_input and os.path.isfile(json_path_input):
             try:
                 self.config.load_json(json_path_input)
-                # Refresh the GUI table
-                # FIXME: This implicitly assumes mmc1 is the Dhyana core with the arduino-switch device
-                self._refresh_config_table()
+                # Rebuild table model to reflect new parameters
+                self.config_table_model = ConfigTableModel(self.config._registry)
+                self.config_view.setModel(self.config_table_model)
+                self.config_table_model.dataChanged.connect(lambda *args: self.configUpdated.emit(self.config))
             except Exception as e:
                 print(f"Trouble updating ExperimentConfig from AcquisitionEngine:\n{json_path_input}\nConfiguration not updated.")
                 print(e) 
 
-    def _on_table_edit(self, row, column):
-        """Update the configuration parameters when the table is edited."""
-        try:
-            if self.config_table.item(row, 0) and self.config_table.item(row, 1):
-                key = self.config_table.item(row, 0).text()
-                value = self.config_table.item(row, 1).text()
-                self.config.update_parameter(key, value)
-            self.configUpdated.emit(self.config) # EMIT SIGNAL TO LISTENERS                
-        except Exception as e:
-            print(f"Error updating config from table: check AcquisitionEngine._on_table_edit()\n{e}")
-
-    def _refresh_config_table(self):
-        """Refresh the configuration table to reflect current parameters."""
-        df = self.config.dataframe
-        self.config_table.blockSignals(True)  # Prevent signals while updating the table
-        self.config_table.clear()
-        self.config_table.setRowCount(len(df))
-        self.config_table.setColumnCount(len(df.columns))
-        self.config_table.setHorizontalHeaderLabels(df.columns.tolist())
-
-        for i, row in df.iterrows():
-            for j, (col_name, value) in enumerate(row.items()):
-                item = QTableWidgetItem(str(value))
-                self.config_table.setItem(i, j, item)
-
-        self.config_table.blockSignals(False)  # Re-enable signals
-
-        self.configUpdated.emit(self.config) # EMIT SIGNAL TO LISTENERS
-        
     def _test_led(self):
         """
         Test the LED pattern by sending a test sequence to the Arduino-Switch device.
@@ -374,6 +378,13 @@ class ConfigController(QWidget):
         if ok and text:
             note_with_timestamp = f"{time}: {text}"
             self.config.notes.append(note_with_timestamp)
+
+    def _on_registry_updated(self, key, value):
+        """Callback to sync registry changes into ExperimentConfig._parameters."""
+        try:
+            self.config._parameters[key] = value
+        except Exception:
+            pass
 
     # ----------------------------------------------------------------------------------------------- #
 
