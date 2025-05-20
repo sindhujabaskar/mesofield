@@ -111,9 +111,11 @@ class SerialWorker(QThread):
         self.clicks = []
         self.start_time = None
 
+    def start_recording(self, file_path: Optional[str] = None) -> None:
+        self.serialStreamStarted.emit()
+        self.start()
 
     def start(self):
-        self.serialStreamStarted.emit()
         return super().start()
     
     
