@@ -203,7 +203,7 @@ class ExperimentConfig:
     @property
     def num_trials(self) -> int:
         """Calculate the number of trials."""
-        return int(self.sequence_duration / self.trial_duration)  
+        return int(self._parameters.get('num_trials', 1))
     
     @property
     def parameters(self) -> dict:
@@ -266,11 +266,11 @@ class ExperimentConfig:
     @property
     def psychopy_filename(self) -> str:
         """Get the PsychoPy experiment filename."""
-        py_files = list(pathlib.Path(self._save_dir).glob('*.py'))
-        if py_files:
-            return py_files[0].name
-        else:
-            warnings.warn(f'No Psychopy experiment file found in directory {pathlib.Path(self.save_dir).parent}.')
+        # py_files = list(pathlib.Path(self._save_dir).glob('*.py'))
+        # if py_files:
+        #     return py_files[0].name
+        # else:
+        #     warnings.warn(f'No Psychopy experiment file found in directory {pathlib.Path(self.save_dir).parent}.')
         return self._registry.get("psychopy_filename", self._parameters.get('psychopy_filename', 'experiment.py'))
 
     @property
@@ -291,7 +291,7 @@ class ExperimentConfig:
             'session': self.session,
             'save_dir': self.save_dir,
             'num_trials': self.num_trials,
-            'filename': self.psychopy_save_path
+            'save_path': self.psychopy_save_path
         }
     
     @property

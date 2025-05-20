@@ -215,33 +215,35 @@ class DillPsychopyGui(QWidget):
             self.json_dropdown.addItems(json_files)
         except Exception as e:
             print(f"Error getting JSON files from directory: {path}\n{e}")
+        self.config.save_dir = path
+
 
     def _update_config(self, index):
         """Update the experiment configuration from a new JSON file."""
-        self.config.load_parameters(self.json_dropdown.currentText())
+        self.config.load_json(self.json_dropdown.currentText())
 
     def on_run_clicked(self):
         self.psychopy_process = psychopy.launch(self.config, self)
 
 
-# def main():
-
-#     app = QApplication(sys.argv)
-#     gui = DillPsychopyGui(config)
-#     gui.show()
-#     sys.exit(app.exec())
+def main():
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication(sys.argv)
+    gui = DillPsychopyGui()
+    gui.show()
+    sys.exit(app.exec())
     
-#     # process = launch_experiment(
-#     #     python_path=r"C:\\Program Files\\PsychoPy\\python.exe",
-#     #     experiment_path=r"D:\Experiment Types\Checkerboard Experiment\CheckerBar_vis_build-v0.8.py",
-#     #     subject="Subject1",
-#     #     session="Session1",
-#     #     save_dir=r"C:\\",
-#     #     num_trials="1",
-#     #     filename=r"D:\Experiment Types\Checkerboard Experiment\data\filename_test2"
-#     #     )
+    # process = launch_experiment(
+    #     python_path=r"C:\\Program Files\\PsychoPy\\python.exe",
+    #     experiment_path=r"D:\Experiment Types\Checkerboard Experiment\CheckerBar_vis_build-v0.8.py",
+    #     subject="Subject1",
+    #     session="Session1",
+    #     save_dir=r"C:\\",
+    #     num_trials="1",
+    #     filename=r"D:\Experiment Types\Checkerboard Experiment\data\filename_test2"
+    #     )
     
 
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()
