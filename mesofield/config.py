@@ -215,15 +215,28 @@ class ExperimentConfig:
     
     @property
     def meso_sequence(self) -> useq.MDASequence:
-        """Create a meso sequence configuration."""
-        frames = int(self.hardware.Dhyana.fps * self.sequence_duration)
-        return useq.MDASequence(time_plan={"interval": 0, "loops": frames})
+        """Create a meso sequence configuration, preferring explicit num_meso_frames."""
+        # Use explicit frame count if provided, else fallback to hardware fps
+        if self._registry.has('num_meso_frames'):
+            loops = int(self._registry.get('num_meso_frames'))
+        else:
+            try:
+                loops = int(self.hardware.Dhyana.fps * self.sequence_duration)
+            except Exception:
+                loops = 0
+        return useq.MDASequence(time_plan={"interval": 0, "loops": loops})
     
     @property
     def pupil_sequence(self) -> useq.MDASequence:
-        """Create a pupil sequence configuration."""
-        frames = int((self.hardware.ThorCam.fps * self.sequence_duration)) + 100 
-        return useq.MDASequence(time_plan={"interval": 0, "loops": frames})
+        """Create a pupil sequence configuration, preferring explicit num_pupil_frames."""
+        if self._registry.has('num_pupil_frames'):
+            loops = int(self._registry.get('num_pupil_frames'))
+        else:
+            try:
+                loops = int(self.hardware.ThorCam.fps * self.sequence_duration) + 100
+            except Exception:
+                loops = 0
+        return useq.MDASequence(time_plan={"interval": 0, "loops": loops})
     
     @property
     def bids_dir(self) -> str:
