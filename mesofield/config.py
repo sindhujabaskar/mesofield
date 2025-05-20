@@ -236,7 +236,9 @@ class ExperimentConfig:
                 loops = int(self.hardware.ThorCam.fps * self.sequence_duration) + 100
             except Exception:
                 loops = 0
-        return useq.MDASequence(time_plan={"interval": 0, "loops": loops})
+        if self.hardware.nidaq:
+            metadata = self.hardware.nidaq.__dict__
+        return useq.MDASequence(metadata=metadata, time_plan={"interval": 0, "loops": loops})
     
     @property
     def bids_dir(self) -> str:

@@ -277,9 +277,9 @@ class ConfigController(QWidget):
         # TODO: Add a check for the MDA sequence and pupil sequence
         # TODO: Fix this ugly logic :)
         if len(self.mmcores) == 1:
-            pupil_sequence = useq.MDASequence(metadata=self.config.hardware.nidaq.__dict__,
-                                            time_plan={"interval": 0, "loops": self.config.num_pupil_frames})
-            thread = threading.Thread(target=self._mmc.run_mda, args=(pupil_sequence,), kwargs={'output': CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))})
+            # pupil_sequence = useq.MDASequence(metadata=self.config.hardware.nidaq.__dict__,
+            #                                 time_plan={"interval": 0, "loops": self.config.num})
+            thread = threading.Thread(target=self._mmc.run_mda, args=(self.config.pupil_sequence,), kwargs={'output': CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))})
         elif len(self.mmcores) == 2:        
             thread1 = threading.Thread(target=self._mmc1.run_mda, 
                                        args=(self.config.meso_sequence,), 
