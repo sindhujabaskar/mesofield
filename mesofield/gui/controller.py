@@ -24,6 +24,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QImage, QPixmap
 from .dynamic_controller import DynamicController
 
+from PyQt6.QtWidgets import QStyle
+from PyQt6.QtGui import QIcon
+
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -154,29 +157,54 @@ class ConfigController(QWidget):
         layout.addLayout(json_layout)
 
         # 3. Table view to display the configuration parameters loaded from the JSON
-        layout.addWidget(QLabel('Experiment Config:'))
+        #layout.addWidget(QLabel('Experiment Config:'))
         self.config_view = QTableView()
         self.config_table_model = ConfigTableModel(self.config._registry)
         self.config_view.setModel(self.config_table_model)
         self.config_view.setEditTriggers(QAbstractItemView.AllEditTriggers)
         self.config_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self.config_view)
+        #layout.addWidget(self.config_view) # Commented out to use ConfigFormWidget instead
+
+        self.config_model = ConfigFormWidget(self.config._registry)
+        layout.addWidget(self.config_model)
+        #self.config_table.setModel(self.config_model)
 
         # 4. Record button to start the MDA sequence
-        self.record_button = QPushButton('Record')
-        layout.addWidget(self.record_button)
+        self.record_button = QPushButton("Record")
 
-        # Dynamic hardware-specific controls
-        self.dynamic_controller = DynamicController(cfg, parent=self)
-        layout.addWidget(self.dynamic_controller)
+        # Tint the standard play icon red
+        play_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay)
+        pix = play_icon.pixmap(24, 24)
+        mask = pix.createMaskFromColor(Qt.transparent)
+        pix.fill(Qt.GlobalColor.red)
+        pix.setMask(mask)
+        self.record_button.setIcon(QIcon(pix))
+
+        # Use default background, no custom color
+        self.record_button.setStyleSheet("""
+            QPushButton {
+            background-color: #424242; /* Dark Grey */
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            }
+            QPushButton:hover {
+            background-color: #616161;
+            }
+            QPushButton:pressed {
+            background-color: #212121;
+            }
+        """)
+
+        layout.addWidget(self.record_button)
 
         # 5. Add Note button to add a note to the configuration
         self.add_note_button = QPushButton("Add Note")
         layout.addWidget(self.add_note_button)
 
-        self.config_model = ConfigFormWidget(self.config._registry)
-        layout.addWidget(self.config_model)
-        #self.config_table.setModel(self.config_model)
+        # Dynamic hardware-specific controls
+        self.dynamic_controller = DynamicController(cfg, parent=self)
+        layout.addWidget(self.dynamic_controller)
         # ------------------------------------------------------------------------------------- #
 
         # ============ Callback connections between widget values and functions ================ #

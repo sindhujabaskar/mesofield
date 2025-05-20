@@ -40,12 +40,18 @@ class MainWindow(QMainWindow):
 
         central_widget = QWidget()
         main_layout = QHBoxLayout(central_widget)
-        mda_layout = QVBoxLayout()
         self.setCentralWidget(central_widget)
 
-        mda_layout.addWidget(self.acquisition_gui)
+        mda_layout = QVBoxLayout()
         main_layout.addLayout(mda_layout)
-        main_layout.addWidget(self.config_controller)
+
+        # Horizontal row for acquisition GUI and config controller
+        top_row = QHBoxLayout()
+        top_row.addWidget(self.acquisition_gui)
+        top_row.addWidget(self.config_controller)
+        mda_layout.addLayout(top_row)
+
+        # Encoder widget below the top row
         mda_layout.addWidget(self.encoder_widget)
         #--------------------------------------------------------------------#
 
