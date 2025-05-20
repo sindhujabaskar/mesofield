@@ -68,7 +68,7 @@ def launch(params):
 @cli.command()
 @click.option('--dir', help='Save the plot to the processing directory in the Experiment folder')
 @click.option('--sub', help='Subject ID (the name of the subject folder)')
-def trace_meso(dir, sub):
+def trace_meso(experiment_dir, subject_id):
     import pandas as pd
     import mesofield.data.load as load
     import mesofield.data.batch as batch
@@ -100,7 +100,7 @@ def batch_pupil(dir):
     from mesofield.data.batch import tiff_to_mp4
         
     tiff_to_mp4(
-        parent_directory=parent_dir,
+        parent_directory=dir,
         fps=30,
         output_format="mp4",
         use_color=False
@@ -122,54 +122,85 @@ def psychopy():
 @cli.command()
 @click.option('--params', default='hardware.yaml', help='Path to the config file')
 def get_fps(params):
+    import json
     from tqdm import tqdm   
     import numpy as np
     import datetime
     from useq import MDAEvent, MDASequence
     from pymmcore_plus import CMMCorePlus
-
+    from pymmcore_plus.metadata import FrameMetaV1
     from mesofield.config import ExperimentConfig
-
+    
+    frame_metadata: FrameMetaV1 = None
+    
     config = ExperimentConfig(params)
     config.hardware._configure_engines(config)
 
+    # measure over a fixed number of frames to get fps
     num_frames = 300
     mmc: CMMCorePlus = config.hardware.ThorCam.core
-
+    #mmc.setExposure(50)
     sequence = MDASequence(time_plan={"interval": 0, "loops": num_frames})
-    
-    times = []
 
-    # initialize progress bar and image‐size tracker
+    # ask user for desired duration (in seconds)
+    duration = float(input("Enter duration in seconds for file‐size estimate: "))
+    num_animals = int(input("Enter number of animals: "))
+    num_sessions = int(input("Enter number of sessions: "))
+
+    times = []
     pbar = tqdm(total=num_frames, desc="Acquiring frames")
     img_size = 0
 
     @mmc.mda.events.frameReady.connect
     def new_frame(img: np.ndarray, event: MDAEvent, metadata: dict):
+        
         nonlocal img_size
-        # capture frame time
+        nonlocal frame_metadata
+        # frame timestamps
         frame_time_str = metadata['camera_metadata']['TimeReceivedByCore']
-        frame_time = datetime.datetime.fromisoformat(frame_time_str)
-        times.append(frame_time)
-        # determine size of one image in bytes
+        times.append(datetime.datetime.fromisoformat(frame_time_str))
+
+        # single instance of frame metadata for printing:
+        if frame_metadata is None:
+            frame_metadata = metadata
+            
+        # record single image size once
         if img_size == 0:
             img_size = img.nbytes
-        # update progress bar
         pbar.update(1)
 
-    @mmc.mda.events.sequenceStarted.connect
-    def on_start(sequence: MDASequence, metadata: dict):
-        print(f"Measuring framerate...")
+    # @mmc.mda.events.sequenceStarted.connect
+    # def on_start(sequence: MDASequence, metadata: dict):
+    #     print("Measuring framerate...")
 
-    # run the sequence and wait (blocking) for it to finish
+    # run acquisition
     mmc.run_mda(sequence, block=True)
+    pbar.close()
+
+    # compute fps
     deltas = [(t2 - t1).total_seconds() for t1, t2 in zip(times[:-1], times[1:])]
     fps = 1 / np.mean(deltas)
-    print(f"FPS: {fps}")
-    pbar.close()
-    # estimate TIFF stack file size (bytes)
-    file_size_bytes = img_size * num_frames
-    print(f"Estimated TIFF stack size: {file_size_bytes / (1024**2):.2f} MB")
+
+    # estimate file size for the user‐specified duration
+    estimated_frames = int(fps * duration)
+    estimated_bytes = img_size * estimated_frames
+    estimated_mb = estimated_bytes / (1024**2)
+    estimated_gb = estimated_bytes / (1024**3)
+    total_gbs = estimated_gb * num_animals * num_sessions
+    summary = {
+        "Camera Device": mmc.getCameraDevice(),
+        "Exposure (ms)": mmc.getExposure(),
+        "Camera Metadata": frame_metadata["camera_metadata"],
+        "Measured FPS": round(fps, 2),
+        "Duration (s)": duration,
+        "Frames": estimated_frames,
+        "Individual TIFF Stack Size (MB)": round(estimated_gb * 1024, 2),
+        "Animals": num_animals,
+        "Sessions": num_sessions,
+        "Total Estimated Size (GB)": round(total_gbs, 2)
+    }
+
+    print(json.dumps(summary, indent=4))
 
 @cli.command()
 @click.option('--yaml_path', default='tests/dev.yaml', help='Path to the YAML config file')
