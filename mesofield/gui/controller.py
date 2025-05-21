@@ -157,17 +157,8 @@ class ConfigController(QWidget):
         layout.addLayout(json_layout)
 
         # 3. Table view to display the configuration parameters loaded from the JSON
-        #layout.addWidget(QLabel('Experiment Config:'))
-        self.config_view = QTableView()
-        self.config_table_model = ConfigTableModel(self.config._registry)
-        self.config_view.setModel(self.config_table_model)
-        self.config_view.setEditTriggers(QAbstractItemView.AllEditTriggers)
-        self.config_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        #layout.addWidget(self.config_view) # Commented out to use ConfigFormWidget instead
-
         self.config_model = ConfigFormWidget(self.config._registry)
         layout.addWidget(self.config_model)
-        #self.config_table.setModel(self.config_model)
 
         # 4. Record button to start the MDA sequence
         self.record_button = QPushButton("Record")
@@ -211,8 +202,6 @@ class ConfigController(QWidget):
 
         self.directory_button.clicked.connect(self._select_directory)
         self.json_dropdown.currentIndexChanged.connect(self._update_config)
-        # Emit configUpdated when table model data changes
-        self.config_table_model.dataChanged.connect(lambda *args: self.configUpdated.emit(self.config))
         self.record_button.clicked.connect(self.record)
         self.add_note_button.clicked.connect(self._add_note)
         
@@ -371,8 +360,15 @@ class ConfigController(QWidget):
                 self.config.load_json(json_path_input)
                 # Rebuild table model to reflect new parameters
                 self.config_table_model = ConfigTableModel(self.config._registry)
-                self.config_view.setModel(self.config_table_model)
-                self.config_table_model.dataChanged.connect(lambda *args: self.configUpdated.emit(self.config))
+                old_form = getattr(self, 'config_model', None)
+                new_form = ConfigFormWidget(self.config._registry)
+                self.config_model = new_form
+                if old_form:
+                    layout = self.layout()
+                    idx = layout.indexOf(old_form)
+                    layout.insertWidget(idx, new_form)
+                    layout.removeWidget(old_form)
+                    old_form.deleteLater()
             except Exception as e:
                 print(f"Trouble updating ExperimentConfig from AcquisitionEngine:\n{json_path_input}\nConfiguration not updated.")
                 print(e) 
@@ -417,6 +413,7 @@ class ConfigController(QWidget):
             self.config._parameters[key] = value
         except Exception:
             pass
+        self.configUpdated.emit(self.config)
 
     # ----------------------------------------------------------------------------------------------- #
 
