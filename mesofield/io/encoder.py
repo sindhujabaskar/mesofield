@@ -91,7 +91,7 @@ class SerialWorker(QThread):
         """Initialize the device. Required for HardwareDevice protocol."""
         self.init_data()
         
-    def close(self) -> None:
+    def shutdown(self) -> None:
         """Close the device. Required for HardwareDevice protocol."""
         self.stop()
         

@@ -66,7 +66,7 @@ class Nidaq:
         """Stop the device."""
         return True
     
-    def close(self) -> None:
+    def shutdown(self) -> None:
         """Close the device."""
         pass
     
