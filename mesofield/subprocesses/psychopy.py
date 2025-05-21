@@ -29,7 +29,7 @@ def get_psychopy_python_exe():
     except OSError:
         pass
     return "C:\Program Files\PsychoPy\python.exe"
-    
+
 def launch(config: 'ExperimentConfig', parent=None):
     """Launches a PsychoPy experiment as a subprocess with the given ExperimentConfig parameters."""
 
@@ -37,10 +37,11 @@ def launch(config: 'ExperimentConfig', parent=None):
     serialized_config = dill.dumps(params, byref=True) #dill handles complex objects, pickle does not
     b64_serialized_config = base64.b64encode(serialized_config).decode('ascii') # Qprocesses require strings
     psychopy_exe = get_psychopy_python_exe()
+    psychopy_script_path = os.path.join(config._save_dir, config.psychopy_filename)
     # Create and start the QProcess
     psychopy_process = QProcess(parent)
     psychopy_process.readyReadStandardOutput.connect(lambda: print(psychopy_process.readAllStandardOutput().data().decode()))
     psychopy_process.readyReadStandardError.connect(lambda: print(psychopy_process.readAllStandardError().data().decode()))
-    psychopy_process.start(psychopy_exe, [config.psychopy_filename, b64_serialized_config])
+    psychopy_process.start(psychopy_exe, [psychopy_script_path, b64_serialized_config])
     
     return psychopy_process
