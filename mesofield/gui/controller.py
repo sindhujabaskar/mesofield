@@ -107,7 +107,7 @@ class ConfigController(QWidget):
     """
     # ==================================== Signals ===================================== #
     configUpdated = pyqtSignal(object)
-    recordStarted = pyqtSignal()
+    recordStarted = pyqtSignal(str)
     # ------------------------------------------------------------------------------------- #
     
     def __init__(self, cfg: 'ExperimentConfig'):

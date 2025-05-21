@@ -257,7 +257,7 @@ class HardwareManager:
                     camera_config.get("micromanager_path"),
                     camera_config.get("configuration_path", None),
                 )
-                camera_object = core.getDeviceObject(camera_id)
+                camera_object = core.getDeviceObject(camera_id, device_type=DeviceType.CameraDevice)
                 for device_id, props in camera_config.get("properties", {}).items():
                     if isinstance(props, dict):
                         for property_id, value in props.items():
