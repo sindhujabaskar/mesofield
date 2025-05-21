@@ -15,6 +15,7 @@ class VideoThread(QThread):
     def __init__(self):
         super().__init__()
         self._run_flag = True
+        self.core = None  # Placeholder for the camera core
 
     def run(self):
         # capture from web cam
@@ -25,6 +26,9 @@ class VideoThread(QThread):
                 self.image_ready.emit(img)
         # shut down capture system
         capture.release()
+
+    def shutdown(self):
+        self.stop()
 
     def stop(self):
         """Sets run flag to False and waits for thread to finish"""

@@ -268,7 +268,7 @@ class HardwareManager:
                                 print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
                                 setattr(camera_object, 'fps', value)
                             elif property_id == 'viewer_type':
-                                setattr(self, 'viewer', value)
+                                setattr(camera_object, 'viewer', value)
                             else:
                                 print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
                                 core.setProperty(device_id, property_id, value)
@@ -289,7 +289,24 @@ class HardwareManager:
                 
             elif backend == 'opencv':
                 camera_object = VideoThread()
-                
+                camera_object.id = camera_id
+                camera_object.core = VideoThread()
+                for device_id, props in camera_config.get("properties", {}).items():
+                    if isinstance(props, dict):
+                        for property_id, value in props.items():
+                            if property_id == 'ROI':
+                                print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
+                            elif property_id == 'fps':
+                                print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
+                                setattr(camera_object, 'fps', value)
+                            elif property_id == 'viewer_type':
+                                setattr(camera_object, 'viewer', value)
+                            else:
+                                print(f"<{__class__.__name__}>: Setting {device_id} {property_id} to {value}")
+                                core.setProperty(device_id, property_id, value)
+                    else:
+                        pass
+
             cams.append(camera_object)
             setattr(self, camera_id, camera_object)
             self.devices[camera_id] = camera_object
