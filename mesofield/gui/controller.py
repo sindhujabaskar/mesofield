@@ -1,10 +1,11 @@
-import numpy as np
 import os
-import subprocess #for PsychoPy Subprocess
-import datetime
+from datetime import datetime
+import threading
+import time
+import numpy as np
 
 from qtpy.QtCore import Qt
-from PyQt6.QtCore import pyqtSignal, QProcess
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -13,31 +14,28 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QComboBox,
-    QTableView,
-    QAbstractItemView,
-    QHeaderView,
     QFileDialog,
     QMessageBox,
     QInputDialog,
     QDialog,
+    QStyle,
+    QFormLayout, 
+    QLineEdit, 
+    QSpinBox, 
+    QCheckBox
 )
-from PyQt6.QtGui import QImage, QPixmap
-from .dynamic_controller import DynamicController
-
-from PyQt6.QtWidgets import QStyle
 from PyQt6.QtGui import QIcon
-
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from mesofield.config import ExperimentConfig
     from pymmcore_plus import CMMCorePlus
 
-from PyQt6.QtWidgets import (
-    QFormLayout, QLineEdit, QSpinBox, QCheckBox
-)
-
+from mesofield.subprocesses.psychopy import PsychoPyProcess
+from mesofield.io import CustomWriter
 from mesofield.gui import ConfigTableModel
+from .dynamic_controller import DynamicController
+
 class ConfigFormWidget(QWidget):
     """Map each config key to an appropriate editor in a form layout."""
     def __init__(self, registry):
@@ -259,59 +257,48 @@ class ConfigController(QWidget):
 
     def record(self):
         """Run the MDA sequence with the global Config object parameters loaded from JSON."""
-        from mesofield.io import CustomWriter
-        import threading
-        import useq
-        import time
+
         # TODO: Add a check for the MDA sequence and pupil sequence
         # TODO: Fix this ugly logic :)
         if len(self.mmcores) == 1:
-            # pupil_sequence = useq.MDASequence(metadata=self.config.hardware.nidaq.__dict__,
-            #                                 time_plan={"interval": 0, "loops": self.config.num})
-            thread = threading.Thread(target=self._mmc.run_mda, args=(self.config.pupil_sequence,), kwargs={'output': CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))})
+            self.writer = CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))
         elif len(self.mmcores) == 2:        
-            thread1 = threading.Thread(target=self._mmc1.run_mda, 
+            self.thread1 = threading.Thread(target=self._mmc1.run_mda, 
                                        args=(self.config.meso_sequence,), 
                                        kwargs={'output': CustomWriter(self.config.make_path("meso", "ome.tiff", bids_type="func"))})
-            thread2 = threading.Thread(target=self._mmc2.run_mda, 
+            self.thread2 = threading.Thread(target=self._mmc2.run_mda, 
                                        args=(self.config.pupil_sequence,), 
                                        kwargs={'output': CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))})
 
         # Wait for spacebar press if start_on_trigger is True
-        if self.config.start_on_trigger == "True":
-            self.launch_psychopy()
-            self.show_popup()
+        if self.config.start_on_trigger:
+            proc = self.launch_psychopy()
+            # abort if PsychoPy failed to initialize
+            # if not getattr(proc, '_handshake_ok', False):
+            #     return
 
         self.config.hardware.encoder.start_recording(self.config.make_path('treadmill_data', 'csv', 'beh'))
-        if len(self.mmcores) == 1:
-            thread.start()
-        elif len(self.mmcores) == 2:        
-            thread1.start()
+        if len(self.mmcores) == 2:        
+            self.thread1.start()
             time.sleep(0.5)
             self.thread2.start()
+        else:
+            self.thread0 = self._mmc.run_mda(self.config.pupil_sequence, output=self.writer)
 
         # Signals to start the MDA sequence and pass a formatted timestamp
-        from datetime import datetime
-
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         self.recordStarted.emit(timestamp)
 
     def launch_psychopy(self):
         """Launches a PsychoPy experiment as a subprocess with the current ExperimentConfig parameters."""
-        from mesofield.subprocesses import psychopy
+        # use PsychoPyProcess to manage handshake and subprocess
+        self.psychopy_process = PsychoPyProcess(self.config, parent=self)
+        self.psychopy_process.error.connect(self._on_psychopy_error)
+        self.psychopy_process.start()
 
-        self.psychopy_process = psychopy.launch(self.config, self)
-        self.psychopy_process.finished.connect(self._handle_process_finished)
-
-    def _handle_process_finished(self, exit_code, exit_status):
-        from PyQt6.QtCore import QProcess
-
-        """Handle the finished state of the PsychoPy subprocess."""
-        if self.psychopy_process.state() != QProcess.NotRunning:
-            self.psychopy_process.kill()
-            self.psychopy_process = None
-        self.psychopy_process.deleteLater()
-        print(f"PsychoPy process finished with exit code {exit_code} and exit status {exit_status}")
+    def _on_psychopy_error(self, message):
+        """Handle PsychoPyProcess error signal (e.g. handshake timeout)."""
+        QMessageBox.critical(self, "PsychoPy Error", message)
     
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Space:
@@ -319,7 +306,7 @@ class ConfigController(QWidget):
     
     def show_popup(self):
         msg_box = QMessageBox()
-        msg_box.setText("Press spacebar to start recording.")
+        msg_box.setText("PsychoPy is Ready:\n Press spacebar to start recording.")
         #msg_box.setStandardButtons(QMessageBox.Ok)
         msg_box.exec_()
     
