@@ -299,9 +299,13 @@ class ConfigController(QWidget):
         elif len(self.mmcores) == 2:        
             thread1.start()
             time.sleep(0.5)
-            thread2.start()
+            self.thread2.start()
 
-        self.recordStarted.emit() # Signals to start the MDA sequence to notify other widgets
+        # Signals to start the MDA sequence and pass a formatted timestamp
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self.recordStarted.emit(timestamp)
 
     def launch_psychopy(self):
         """Launches a PsychoPy experiment as a subprocess with the current ExperimentConfig parameters."""

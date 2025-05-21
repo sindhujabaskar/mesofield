@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 )
 
 from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import QCoreApplication
 
 from mesofield.gui.mdagui import MDA
 from mesofield.gui.controller import ConfigController
@@ -64,9 +65,10 @@ class MainWindow(QMainWindow):
 
 
     #============================== Methods =================================#    
-    def record(self):
-        print('recording')
-        
+    def record(self, timestamp):
+        self.config.register_parameter("recording_started", timestamp)
+
+
     def toggle_console(self):
         """Show or hide the IPython console."""
         if self.console_widget and self.console_widget.isVisible():
@@ -121,11 +123,59 @@ class MainWindow(QMainWindow):
     #----------------------------------------------------------------------------#
 
     def closeEvent(self, event):
-        if hasattr(self.config.hardware.cameras[0], 'backend'):
-            if self.config.hardware.cameras[0].backend == 'opencv':
-                self.config.hardware.cameras[0].thread.stop()
-        self.config.hardware.shutdown()
+        # 0. Try to shut down the MDA relay threads gracefully
+        try:
+            self.acquisition_gui.mda.shutdown()
+        except Exception:
+            pass
+
+        # 1. Stop any remaining relay threads
+        for thread_name in ("thread0", "thread1", "thread2"):
+            thr = getattr(self.config_controller, thread_name, None)
+            if not thr:
+                continue
+
+            # If it's a pymmcore_plus relay thread, signal it to stop
+            if hasattr(thr, "shutdown"):
+                try:
+                    thr.shutdown()
+                except Exception:
+                    pass
+
+            # Wait for it to terminate
+            if hasattr(thr, "is_alive") and thr.is_alive():
+                thr.join(timeout=2)
+            elif hasattr(thr, "isRunning") and thr.isRunning():
+                thr.quit()
+                thr.wait(2000)
+
+        # # 2. Abort any remaining acquisitions and reset each core
+        # for cam in getattr(self.config.hardware, "cameras", []):
+        #     core = getattr(cam, "core", None)
+        #     if not core:
+        #         continue
+        #     try:
+        #         core.stopSequenceAcquisition()
+        #         core.reset()
+        #     except Exception:
+        #         pass
+
+        # 3. Shut down the IPython console
+        if hasattr(self, "kernel_client"):
+            self.kernel_client.stop_channels()
+        if hasattr(self, "kernel_manager"):
+            self.kernel_manager.shutdown_kernel()
+        if hasattr(self, "console_widget"):
+            self.console_widget.close()
+
+        # 4. Finally shut down all hardware
+        try:
+            self.config.hardware.shutdown()
+        except Exception:
+            pass
+
         event.accept()
+        QCoreApplication.quit()
 
     #============================== Private Methods =============================#
     def _on_end(self) -> None:
