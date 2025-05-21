@@ -6,7 +6,7 @@ import importlib
 import yaml
 import nidaqmx.system
 import nidaqmx
-from pymmcore_plus import CMMCorePlus
+from pymmcore_plus import CMMCorePlus, DeviceType
 
 from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.arducam import VideoThread
