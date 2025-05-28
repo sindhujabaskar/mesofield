@@ -371,7 +371,3 @@ def create_procedure(procedure_class: Type[BaseProcedure],
     )
     
     return procedure_class(config)
-
-
-# Legacy constants for backward compatibility
-NAME = "mesofield"

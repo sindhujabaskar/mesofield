@@ -37,11 +37,37 @@ T = TypeVar('T')
 # and documentation, but should not be used for inheritance with classes that
 # already have a metaclass (like QThread)
 
+
+
+# Define configuration interface
+class Configurator(Protocol):
+    """Protocol defining the interface for configuration providers."""
+    def get(self, key: str, default: Any = None) -> Any:
+        """Retrieve a configuration value for the given key."""
+        ...
+    
+    def set(self, key: str, value: Any) -> None:
+        """Set a configuration value for the given key."""
+        ...
+    
+    def has(self, key: str) -> bool:
+        """Check if the configuration contains the given key."""
+        ...
+    
+    def keys(self) -> List[str]:
+        """Get all configuration keys."""
+        ...
+    
+    def items(self) -> Dict[str, Any]:
+        """Get all configuration key-value pairs."""
+        ...
+
 class Procedure(Protocol):
     """Protocol defining the standard interface for experiment procedures."""
     
     experiment_id: str
     experimentor: str
+    config: Configurator
     hardware_yaml: str
     data_dir: str
     
@@ -71,31 +97,7 @@ class Procedure(Protocol):
     def cleanup(self) -> None:
         """Clean up after the experiment procedure."""
         ...
-
-# Define configuration interface
-class Configurator(Protocol):
-    """Protocol defining the interface for configuration providers."""
-    def get(self, key: str, default: Any = None) -> Any:
-        """Retrieve a configuration value for the given key."""
-        ...
-    
-    def set(self, key: str, value: Any) -> None:
-        """Set a configuration value for the given key."""
-        ...
-    
-    def has(self, key: str) -> bool:
-        """Check if the configuration contains the given key."""
-        ...
-    
-    def keys(self) -> List[str]:
-        """Get all configuration keys."""
-        ...
-    
-    def items(self) -> Dict[str, Any]:
-        """Get all configuration key-value pairs."""
-        ...
-
-
+        
 @runtime_checkable
 class HardwareDevice(Protocol):
     """Protocol defining the standard interface for all hardware devices."""

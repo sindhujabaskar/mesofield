@@ -17,21 +17,22 @@ from PyQt6.QtCore import QCoreApplication
 from mesofield.gui.mdagui import MDA
 from mesofield.gui.controller import ConfigController
 from mesofield.gui.speedplotter import EncoderWidget
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from mesofield.config import ExperimentConfig
+    from mesofield.protocols import Procedure
 
 class MainWindow(QMainWindow):
-    def __init__(self, cfg: 'ExperimentConfig'):
+    def __init__(self, cfg: 'ExperimentConfig', procedure: Optional['Procedure'] = None):
         super().__init__()
         self.setWindowTitle("Mesofield")
         self.config = cfg
+        self.procedure = procedure
 
         window_icon = QIcon(os.path.join(os.path.dirname(__file__), "Mesofield_icon.png"))
-        self.setWindowIcon(window_icon)
-        #============================== Widgets =============================#
+        self.setWindowIcon(window_icon)        #============================== Widgets =============================#
         self.acquisition_gui = MDA(self.config)
-        self.config_controller = ConfigController(self.config)
+        self.config_controller = ConfigController(self.config, procedure)
         self.encoder_widget = EncoderWidget(self.config)
         self.initialize_console(cfg) # Initialize the IPython console
         #--------------------------------------------------------------------#
@@ -110,16 +111,20 @@ class MainWindow(QMainWindow):
         # Create the console widget
         self.console_widget = RichJupyterWidget()
         self.console_widget.kernel_manager = self.kernel_manager
-        self.console_widget.kernel_client = self.kernel_client
-
-        # Expose variables to the console's namespace
-        self.kernel.shell.push({
+        self.console_widget.kernel_client = self.kernel_client        # Expose variables to the console's namespace
+        console_namespace = {
             #'mda': self.acquisition_gui.mda,
             'self': self,
             'config': cfg,
             'data': data
             # Optional, so you can use 'self' directly in the console
-        })
+        }
+        
+        # Add procedure to console namespace if available
+        if self.procedure is not None:
+            console_namespace['procedure'] = self.procedure
+        
+        self.kernel.shell.push(console_namespace)
     #----------------------------------------------------------------------------#
 
     def closeEvent(self, event):

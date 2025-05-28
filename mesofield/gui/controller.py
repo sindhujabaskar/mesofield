@@ -26,10 +26,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from mesofield.config import ExperimentConfig
     from pymmcore_plus import CMMCorePlus
+    from mesofield.protocols import Procedure
 
 from mesofield.subprocesses.psychopy import PsychoPyProcess
 from mesofield.io import CustomWriter
@@ -107,13 +108,13 @@ class ConfigController(QWidget):
     configUpdated = pyqtSignal(object)
     recordStarted = pyqtSignal(str)
     # ------------------------------------------------------------------------------------- #
-    
-    def __init__(self, cfg: 'ExperimentConfig'):
+      def __init__(self, cfg: 'ExperimentConfig', procedure: Optional['Procedure'] = None):
         super().__init__()
         self.mmcores = cfg._cores
         # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
 
         self.config = cfg
+        self.procedure = procedure
         # Sync registry changes to legacy parameters dict
         for key in self.config._registry.keys():
             self.config._registry.register_callback(key, self._on_registry_updated)
@@ -183,9 +184,37 @@ class ConfigController(QWidget):
             QPushButton:pressed {
             background-color: #212121;
             }
-        """)
+        """)        layout.addWidget(self.record_button)
 
-        layout.addWidget(self.record_button)
+        # Procedure-specific controls (only shown when procedure is available)
+        if self.procedure is not None:
+            # Add procedure info label
+            procedure_name = self.procedure.__class__.__name__
+            self.procedure_label = QLabel(f"Procedure: {procedure_name}")
+            self.procedure_label.setStyleSheet("QLabel { font-weight: bold; color: #2196F3; }")
+            layout.addWidget(self.procedure_label)
+            
+            # Add procedure configuration button
+            self.configure_procedure_button = QPushButton("Configure Procedure")
+            self.configure_procedure_button.setStyleSheet("""
+                QPushButton {
+                background-color: #2196F3; /* Blue */
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                color: white;
+                }
+                QPushButton:hover {
+                background-color: #1976D2;
+                }
+                QPushButton:pressed {
+                background-color: #0D47A1;
+                }
+            """)
+            layout.addWidget(self.configure_procedure_button)
+            
+            # Connect procedure configuration button
+            self.configure_procedure_button.clicked.connect(self._configure_procedure)
 
         # 5. Add Note button to add a note to the configuration
         self.add_note_button = QPushButton("Add Note")
@@ -253,11 +282,25 @@ class ConfigController(QWidget):
         plt.imsave(file_path, image, cmap='gray')
 
         # Close the dialog
-        dialog.accept()
-
-    def record(self):
-        """Run the MDA sequence with the global Config object parameters loaded from JSON."""
-
+        dialog.accept()    def record(self):
+        """Run the experimental procedure or fallback to legacy MDA sequence."""
+        
+        # If a procedure is available, use it for the experimental workflow
+        if self.procedure is not None:
+            try:
+                # Run the procedure in a separate thread to avoid blocking the GUI
+                self.procedure_thread = threading.Thread(target=self._run_procedure)
+                self.procedure_thread.start()
+                
+                # Signal that recording has started
+                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.recordStarted.emit(timestamp)
+                return
+            except Exception as e:
+                QMessageBox.critical(self, "Procedure Error", f"Failed to run procedure: {str(e)}")
+                return
+        
+        # Legacy MDA sequence logic (fallback when no procedure is provided)
         # TODO: Add a check for the MDA sequence and pupil sequence
         # TODO: Fix this ugly logic :)
         if len(self.mmcores) == 1:
@@ -299,6 +342,18 @@ class ConfigController(QWidget):
     def _on_psychopy_error(self, message):
         """Handle PsychoPyProcess error signal (e.g. handshake timeout)."""
         QMessageBox.critical(self, "PsychoPy Error", message)
+    
+    def _run_procedure(self):
+        """Run the procedure in a separate thread."""
+        try:
+            self.procedure.run()
+        except Exception as e:
+            # Handle errors in the procedure execution
+            # Since this runs in a thread, we need to emit a signal or use Qt's invokeMethod
+            # For now, we'll print the error (in a real implementation, you'd want proper error handling)
+            print(f"Procedure execution error: {e}")
+            import traceback
+            traceback.print_exc()
     
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Space:
@@ -383,8 +438,7 @@ class ConfigController(QWidget):
             print("LED test pattern stopped successfully.")
         except Exception as e:
             print(f"Error stopping LED pattern: {e}")
-            
-    def _add_note(self):
+              def _add_note(self):
         """
         Open a dialog to get a note from the user and save it to the ExperimentConfig.notes list.
         """
@@ -393,6 +447,42 @@ class ConfigController(QWidget):
         if ok and text:
             note_with_timestamp = f"{time}: {text}"
             self.config.notes.append(note_with_timestamp)
+
+    def _configure_procedure(self):
+        """
+        Open a dialog to configure procedure parameters.
+        """
+        if self.procedure is None:
+            return
+            
+        # Create a simple configuration dialog
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QDialogButtonBox
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Configure {self.procedure.__class__.__name__}")
+        dialog.setModal(True)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Add procedure configuration form if the procedure has a config
+        if hasattr(self.procedure, 'config') and self.procedure.config:
+            config_form = ConfigFormWidget(self.procedure.config)
+            layout.addWidget(config_form)
+        else:
+            # Show a simple message if no configuration is available
+            info_label = QLabel("This procedure has no configurable parameters.")
+            layout.addWidget(info_label)
+        
+        # Add OK/Cancel buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        # Show the dialog
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Configuration changes are automatically applied through the form widget
+            QMessageBox.information(self, "Configuration", "Procedure configuration updated.")
 
     def _on_registry_updated(self, key, value):
         """Callback to sync registry changes into ExperimentConfig._parameters."""
