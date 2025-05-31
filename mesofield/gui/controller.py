@@ -116,8 +116,8 @@ class ConfigController(QWidget):
         self.config = cfg
         self.procedure = procedure
         # Sync registry changes to legacy parameters dict
-        for key in self.config._registry.keys():
-            self.config._registry.register_callback(key, self._on_registry_updated)
+        for key in self.config.keys():
+            self.config.register_callback(key, self._on_registry_updated)
         if len(self.mmcores) == 1:
             self._mmc: CMMCorePlus = self.mmcores[0]
         elif len(self.mmcores) == 2:
@@ -156,7 +156,7 @@ class ConfigController(QWidget):
         layout.addLayout(json_layout)
 
         # 3. Table view to display the configuration parameters loaded from the JSON
-        self.config_model = ConfigFormWidget(self.config._registry)
+        self.config_model = ConfigFormWidget(self.config)
         layout.addWidget(self.config_model)
 
         # 4. Record button to start the MDA sequence
@@ -184,7 +184,8 @@ class ConfigController(QWidget):
             QPushButton:pressed {
             background-color: #212121;
             }
-        """)        layout.addWidget(self.record_button)
+        """)        
+        layout.addWidget(self.record_button)
 
         # Procedure-specific controls (only shown when procedure is available)
         if self.procedure is not None:
@@ -282,7 +283,9 @@ class ConfigController(QWidget):
         plt.imsave(file_path, image, cmap='gray')
 
         # Close the dialog
-        dialog.accept()    def record(self):
+        dialog.accept()    
+    
+    def record(self):
         """Run the experimental procedure or fallback to legacy MDA sequence."""
         
         # If a procedure is available, use it for the experimental workflow
@@ -401,9 +404,9 @@ class ConfigController(QWidget):
             try:
                 self.config.load_json(json_path_input)
                 # Rebuild table model to reflect new parameters
-                self.config_table_model = ConfigTableModel(self.config._registry)
+                self.config_table_model = ConfigTableModel(self.config)
                 old_form = getattr(self, 'config_model', None)
-                new_form = ConfigFormWidget(self.config._registry)
+                new_form = ConfigFormWidget(self.config)
                 self.config_model = new_form
                 if old_form:
                     layout = self.layout()
@@ -438,11 +441,12 @@ class ConfigController(QWidget):
             print("LED test pattern stopped successfully.")
         except Exception as e:
             print(f"Error stopping LED pattern: {e}")
-              def _add_note(self):
+    
+    def _add_note(self):
         """
         Open a dialog to get a note from the user and save it to the ExperimentConfig.notes list.
         """
-        time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         text, ok = QInputDialog.getText(self, 'Add Note', 'Enter your note:')
         if ok and text:
             note_with_timestamp = f"{time}: {text}"
