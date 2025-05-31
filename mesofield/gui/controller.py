@@ -307,10 +307,10 @@ class ConfigController(QWidget):
             self.writer = CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))
         elif len(self.mmcores) == 2:        
             self.thread1 = threading.Thread(target=self._mmc1.run_mda, 
-                                       args=(self.config.meso_sequence,), 
+                                       args=(self.config.build_sequence(self.config.hardware.cameras[0]),), 
                                        kwargs={'output': CustomWriter(self.config.make_path("meso", "ome.tiff", bids_type="func"))})
             self.thread2 = threading.Thread(target=self._mmc2.run_mda, 
-                                       args=(self.config.pupil_sequence,), 
+                                       args=(self.config.build_sequence(self.config.hardware.cameras[1]),), 
                                        kwargs={'output': CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))})
 
         # Wait for spacebar press if start_on_trigger is True
@@ -326,7 +326,7 @@ class ConfigController(QWidget):
             time.sleep(0.5)
             self.thread2.start()
         else:
-            self.thread0 = self._mmc.run_mda(self.config.pupil_sequence, output=self.writer)
+            self.thread0 = self._mmc.run_mda(self.config.build_sequence(self.config.hardware.cameras[0]), output=self.writer)
 
         # Signals to start the MDA sequence and pass a formatted timestamp
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

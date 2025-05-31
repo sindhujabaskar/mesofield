@@ -213,32 +213,23 @@ class ExperimentConfig:
         params.update(self._parameters)
         return params
     
-    @property
-    def meso_sequence(self) -> useq.MDASequence:
-        """Create a meso sequence configuration, preferring explicit num_meso_frames."""
-        # Use explicit frame count if provided, else fallback to hardware fps
-        if self._registry.has('num_meso_frames'):
-            loops = int(self._registry.get('num_meso_frames'))
+    def build_sequence(self, camera: DataProducer) -> useq.MDASequence:
+        if self.has('num_meso_frames'):
+            loops = int(self.get('num_meso_frames'))
         else:
             try:
-                loops = int(self.hardware.Dhyana.fps * self.sequence_duration)
+                loops = int(camera.sampling_rate * self.sequence_duration)
             except Exception:
-                loops = 0
-        return useq.MDASequence(time_plan={"interval": 0, "loops": loops})
-    
-    @property
-    def pupil_sequence(self) -> useq.MDASequence:
-        """Create a pupil sequence configuration, preferring explicit num_pupil_frames."""
-        if self._registry.has('num_pupil_frames'):
-            loops = int(self._registry.get('num_pupil_frames'))
-        else:
-            try:
-                loops = int(self.hardware.ThorCam.fps * self.sequence_duration) + 100
-            except Exception:
-                loops = 0
-        if self.hardware.nidaq:
-            metadata = self.hardware.nidaq.__dict__
-        return useq.MDASequence(metadata=metadata, time_plan={"interval": 0, "loops": loops})
+                loops = 5
+            metadata = self.hardware.__dict__
+
+        # convert to a datetime.timedelta and build the time_plan
+        time_plan = TIntervalLoops(
+            interval=0,
+            loops=loops,
+            prioritize_duration=False
+        )
+        return useq.MDASequence(metadata=metadata, time_plan=time_plan)
     
     @property
     def bids_dir(self) -> str:
