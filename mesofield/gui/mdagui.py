@@ -109,7 +109,7 @@ class MDA(QWidget):
 
         for cam in self.cameras:
             # Per-core container
-            core_box = QGroupBox(title=str(cam))
+            core_box = QGroupBox(title=str(cam.name))
             core_box.setLayout(QVBoxLayout())
             core_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
