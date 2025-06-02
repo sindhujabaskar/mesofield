@@ -30,7 +30,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(window_icon)        
         #============================== Widgets =============================#
         self.acquisition_gui = MDA(self.config)
-        self.config_controller = ConfigController(self.config)
+        self.config_controller = ConfigController(self.config, self.procedure)
         self.encoder_widget = EncoderWidget(self.config)
         self.initialize_console(self.config) # Initialize the IPython console
         #--------------------------------------------------------------------#

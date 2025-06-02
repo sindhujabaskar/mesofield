@@ -106,18 +106,13 @@ class BaseProcedure(abc.ABC):
             self.logger.error(f"Failed to initialize hardware: {e}")
             return False
     
-    def setup_configuration(self, json_config: str) -> None:
+    def setup_configuration(self, json_config: Optional[str]) -> None:
         """Set up the configuration for the experiment procedure.
         
         Args:
             json_config: Path to a JSON configuration file (.json)
         """
-        try:
-            self.config.load_json(json_config)
-            self.logger.info(f"Loaded configuration from: {json_config}")
-        except Exception as e:
-            self.logger.error(f"Failed to load configuration from {json_config}: {e}")
-            raise
+
     
     def save_data(self) -> None:
         """Save data from the experiment."""
@@ -235,30 +230,21 @@ class MesofieldProcedure(BaseProcedure):
         
         super().__init__(procedure_config)
     
+    def setup_configuration(self, json_config: Optional[str]):
+        try:
+            self.config.load_json(json_config)
+            self.logger.info(f"Loaded configuration from: {json_config}")
+            self.logger.info(f"Sending configuration to MMCore engines: {self.config.__dict__}")
+            self.config.hardware._configure_engines(self.config)
+        except Exception as e:
+            self.logger.error(f"Failed to load configuration from {json_config}: {e}")
+            raise
+    
     def run(self) -> None:
         """Run the standard Mesofield experiment procedure."""
         self.logger.info("Starting Mesofield experiment procedure")
         
         try:
-         
-            # Start data acquisition
-            if self.config.get("auto_start_cameras", True):
-                self.start_cameras()
-            
-            if self.config.get("auto_start_encoder", True):
-                self.start_encoder()
-            
-            # Wait for trigger if enabled
-            if self.config.get("start_on_trigger", False):
-                self._wait_for_trigger()
-            
-            # Record for specified duration
-            duration = self.config.get("duration", 60)
-            self.logger.info(f"Recording for {duration} seconds")
-            
-            # This could easily be hidden away within Camera hardware class objects, but it is 
-            # convenient to have it here for readability and simplicity (ie. for scientific pseudo-programmers [me])
-            # Build a single list of (mmc, sequence, writer) tuples
             recorders = [
                 (
                     cam.core,
@@ -278,20 +264,15 @@ class MesofieldProcedure(BaseProcedure):
             self.config.hardware.get_encoder().start_recording(
                 self.config.make_path("treadmill_data", "csv", "beh")
             )
-
             # Run all cameras
             for mmc, sequence, writer in recorders:
                 mmc.run_mda(sequence, output=writer, block=False)
 
-            self.logger.info("Recording completed")
             
         except Exception as e:
             self.logger.error(f"Error during experiment: {e}")
             raise
         
-        # finally:
-        #     # Cleanup
-        #     self._cleanup_procedure()
     
     def _launch_psychopy(self):
         """Launch PsychoPy subprocess if configured."""
@@ -312,6 +293,8 @@ class MesofieldProcedure(BaseProcedure):
     
     def _cleanup_procedure(self):
         """Cleanup after the procedure."""
+        self.logger.info("Cleanup Procedure")
+
         try:
             self.stop_cameras()
             self.stop_encoder()

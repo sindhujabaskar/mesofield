@@ -292,7 +292,7 @@ class ConfigController(QWidget):
         if self.procedure is not None:
             try:
                 # Run the procedure in a separate thread to avoid blocking the GUI
-                self.procedure_thread = threading.Thread(target=self._run_procedure)
+                self.procedure_thread = threading.Thread(target=self.procedure.run())
                 self.procedure_thread.start()
                 
                 # Signal that recording has started
@@ -370,7 +370,7 @@ class ConfigController(QWidget):
 
         if json_path_input and os.path.isfile(json_path_input):
             try:
-                self.config.load_json(json_path_input)
+                self.procedure.setup_configuration(json_path_input)
                 # Rebuild table model to reflect new parameters
                 self.config_table_model = ConfigTableModel(self.config)
                 old_form = getattr(self, 'config_model', None)
