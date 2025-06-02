@@ -34,7 +34,6 @@ any class that already uses a metaclass. Protocol checking uses duck typing
 internally, so both approaches will work with our system.
 """
 
-import logging
 from typing import Dict, List, Any, Optional, Protocol, TypeVar, Generic, runtime_checkable
 
 T = TypeVar('T')
@@ -43,24 +42,6 @@ T = TypeVar('T')
 # and documentation, but should not be used for inheritance with classes that
 # already have a metaclass (like QThread)
 
-class LoggingMixin:
-    """Simple mixin to add logging to any class."""
-    
-    def _init_logger(self):
-        """Initialize a logger for this instance."""
-        try:
-            from .._logger import get_logger
-            self.logger = get_logger(self.__class__.__name__)
-        except ImportError:
-            # Fallback if centralized logging isn't available
-            import logging
-            self.logger = logging.getLogger(self.__class__.__name__)
-            if not self.logger.handlers:
-                handler = logging.StreamHandler()
-                formatter = logging.Formatter('%(name)s | %(levelname)s | %(message)s')
-                handler.setFormatter(formatter)
-                self.logger.addHandler(handler)
-                self.logger.setLevel(logging.INFO)
 
 # Define configuration interface
 class Configurator(Protocol):

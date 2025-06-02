@@ -16,7 +16,7 @@ from typing import Dict, Any, Optional, Type, List
 from mesofield.config import ExperimentConfig
 from mesofield.hardware import HardwareManager
 from mesofield.io.manager import DataManager
-from mesofield._logger import get_logger
+from mesofield.utils._logger import get_logger
 from mesofield.io.writer import CustomWriter
 
 @dataclass 

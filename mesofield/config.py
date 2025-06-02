@@ -9,7 +9,7 @@ from useq import TIntervalLoops
 
 from mesofield.hardware import HardwareManager
 from mesofield.protocols import DataProducer
-from mesofield._logger import get_logger
+from mesofield.utils._logger import get_logger
 
 T = TypeVar('T')
 

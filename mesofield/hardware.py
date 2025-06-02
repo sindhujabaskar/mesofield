@@ -14,7 +14,7 @@ from mesofield.io.arducam import VideoThread
 from mesofield.io.encoder import SerialWorker
 from mesofield.io.treadmill import EncoderSerialInterface
 from mesofield.protocols import HardwareDevice, DataProducer
-from mesofield._logger import get_logger, log_this_fr
+from mesofield.utils._logger import get_logger, log_this_fr
 
 T = TypeVar("T")
 
