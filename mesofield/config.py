@@ -1,15 +1,15 @@
 import os
 import json
-import warnings
 import datetime
-import pathlib
 from typing import Dict, Any, List, Optional, Type, TypeVar, Callable
 
 import pandas as pd
 import useq
+from useq import TIntervalLoops
 
 from mesofield.hardware import HardwareManager
-
+from mesofield.protocols import DataProducer
+from mesofield._logger import get_logger
 
 T = TypeVar('T')
 
@@ -116,8 +116,12 @@ class ExperimentConfig(ConfigRegister):
     """
 
     def __init__(self, path: str):
+        super().__init__()
+        # Initialize logging first
+        self.logger = get_logger(__name__)
+        self.logger.info(f"Initializing ExperimentConfig with hardware path: {path}")
+        
         # Initialize the configuration registry
-        self._registry = ConfigRegister()
         self._json_file_path = ''
         self._output_path = ''
         self._save_dir = ''
@@ -125,20 +129,17 @@ class ExperimentConfig(ConfigRegister):
 
         # Register common configuration parameters with defaults and types
         self._register_default_parameters()
+        self.logger.debug("Registered default parameters")
 
         # Initialize hardware
-        self.hardware = HardwareManager(path)
+        try:
+            self.hardware = HardwareManager(path)
+            self.logger.info(f"Hardware initialized with {len(self.hardware.devices)} devices")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize hardware: {e}")
+            raise
         
-        # Initialize data manager
-        from mesofield.io.manager import DataManager
-        self.data_manager = DataManager()
-        
-        # Register hardware devices with data manager
-        for device_id, device in self.hardware.devices.items():
-            if hasattr(device, 'device_type') and hasattr(device, 'get_data'):
-                self.data_manager.register_hardware_device(device)
-        
-        self.notes: list = []    
+        self.notes: list = []
 
     def _register_default_parameters(self):
         """Register default parameters in the registry."""
@@ -335,15 +336,17 @@ class ExperimentConfig(ConfigRegister):
     def load_json(self, file_path) -> None:
         """ Load parameters from a JSON configuration file into the config object. 
         """
+        self.logger.info(f"Loading configuration from: {file_path}")
         try:
             with open(file_path, 'r') as f:
                 self._parameters = json.load(f)
+            self.logger.info(f"Successfully loaded {len(self._parameters)} parameters from JSON")
         except FileNotFoundError:
-            print(f"File not found: {file_path}")
+            self.logger.error(f"Configuration file not found: {file_path}")
             return 
         except json.JSONDecodeError as e:
-            print(f"Error decoding JSON: {e}")
-            return 
+            self.logger.error(f"Error decoding JSON from {file_path}: {e}")
+            return
             
         self._json_file_path = file_path #store the json filepath
         
@@ -371,29 +374,30 @@ class ExperimentConfig(ConfigRegister):
         encoder_path = self.make_path(suffix="encoder-data", extension="csv", bids_type='beh')
         try:
             data.to_csv(encoder_path, index=False)
-            print(f"Encoder data saved to {encoder_path}")
+            print(f"Encoder data saved to {encoder_path}")        
         except Exception as e:
             print(f"Error saving encoder data: {e}")
             
     def save_configuration(self):
         """ Save the configuration parameters from the registry to a CSV file """
+        self.logger.info("Saving configuration and notes")
         params_path = self.make_path(suffix="configuration", extension="csv")
         try:
             # Get all parameters from the registry
-            registry_items = self._registry.items()
+            registry_items = self.items()
             params_df = pd.DataFrame(list(registry_items.items()), columns=['Parameter', 'Value'])
             params_df.to_csv(params_path, index=False)
-            print(f"Configuration saved to {params_path}")
+            self.logger.info(f"Configuration saved to {params_path}")
         except Exception as e:
-            print(f"Error saving configuration: {e}")
+            self.logger.error(f"Error saving configuration: {e}")
         
         notes_path = self.make_path(suffix="notes", extension="txt")
         try:
             with open(notes_path, 'w') as f:
                 f.write('\n'.join(self.notes))
-                print(f"Notes saved to {notes_path}")
+                self.logger.info(f"Notes saved to {notes_path}")
         except Exception as e:
-            print(f"Error saving notes: {e}")
+            self.logger.error(f"Error saving notes: {e}")
     
     def save_parameters(self, file_path=None):
         """Save parameters to a file (JSON or YAML based on extension)."""
@@ -405,7 +409,7 @@ class ExperimentConfig(ConfigRegister):
             return
             
         try: #to save combined registry and legacy parameters
-            combined_params = self._registry.items()
+            combined_params = self.items()
             combined_params.update(self._parameters)
             with open(file_path, 'w') as f:
                 json.dump(combined_params, f, indent=2)
