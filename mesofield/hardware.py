@@ -2,9 +2,9 @@ VALID_BACKENDS = {"micromanager", "opencv"}
 import time
 import inspect
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional, Type, ClassVar
-import importlib
+from typing import Dict, Any, List, Optional, Type, ClassVar, TypeVar, Callable
 import yaml
+
 import nidaqmx.system
 import nidaqmx
 from pymmcore_plus import CMMCorePlus, DeviceType
@@ -16,6 +16,7 @@ from mesofield.io.treadmill import EncoderSerialInterface
 from mesofield.protocols import HardwareDevice, DataProducer
 from mesofield._logger import get_logger, log_this_fr
 
+T = TypeVar("T")
 
 class DeviceRegistry:
     """Registry for device classes."""
@@ -23,9 +24,9 @@ class DeviceRegistry:
     _registry: Dict[str, Type[Any]] = {}
     
     @classmethod
-    def register(cls, device_type: str) -> callable:
+    def register(cls, device_type: str) -> Callable[[Type[T]], Type[T]]:
         """Register a device class for a specific device type."""
-        def decorator(device_class: Type[Any]) -> Type[Any]:
+        def decorator(device_class: Type[T]) -> Type[T]:
             cls._registry[device_type] = device_class
             return device_class
         return decorator
@@ -321,18 +322,23 @@ class Nidaq:
         """Get a parameter from the device."""
         return self.config.get(parameter)
 
+from pymmcore_plus.core._device import CameraDevice 
+
 @DeviceRegistry.register("camera")
 class MMCamera(DataProducer, HardwareDevice):
+    
     device_type = "camera"
 
     def __init__(self, cfg: dict):
-        self.id         = cfg["id"]
-        self.name       = cfg["name"]
-        self.backend    = cfg.get("backend", "").lower()
+        self.camera_device: Optional[CameraDevice | VideoThread] = None
+        self.core: Optional[CMMCorePlus | VideoThread] = None
+        self.id = cfg["id"]
+        self.name = cfg["name"]
+        self.backend = cfg.get("backend", "").lower()
         self.properties = cfg.get("properties", {})
-        self.camera_device = None
-        self._engine       = None
-        self.is_active     = False
+        self.viewer = cfg.get("viewer_type", "static")
+        self._engine = None
+        self.is_active = False
         self.logger = get_logger(f"{__name__}.MMCamera[{self.id}]")
 
         if self.backend == "micromanager":
@@ -349,8 +355,7 @@ class MMCamera(DataProducer, HardwareDevice):
         core = CMMCorePlus(cfg.get("micromanager_path"))
         cfg_path = cfg.get("configuration_path")
         core.loadSystemConfiguration(cfg_path) if cfg_path else core.loadSystemConfiguration()
-        from pymmcore_plus.core._device import CameraDevice 
-        self.camera_device: CameraDevice = core.getDeviceObject(core.getCameraDevice(),
+        self.camera_device = core.getDeviceObject(core.getCameraDevice(),
                                                   DeviceType.Camera)
         Engine = {"ThorCam": PupilEngine,
                   "Dhyana": MesoEngine}.get(self.id, DevEngine)
@@ -369,15 +374,19 @@ class MMCamera(DataProducer, HardwareDevice):
                 continue
             for prop, val in props.items():
                 self.logger.info(f"Setting {dev_id}.{prop} → {val}")
-                if prop == "ROI" and self.backend == "micromanager":
-                    self.camera_device.core.setROI(dev_id, *val)
+                if prop == "ROI":
+                    roi_setter = getattr(self.core, "setROI", None) if self.backend == "micromanager" else None
+                    if roi_setter:
+                        roi_setter(dev_id, *val)
                 elif prop == "fps":
                     setattr(self, "sampling_rate", val)
                 elif prop == "viewer_type":
                     setattr(self, "viewer", val)
                 else:
-                    setter = (getattr(self.camera_device.core, "setProperty", None)
-                              or getattr(self.camera_device, "setProperty", None))
+                    if self.backend == "micromanager":
+                        setter = getattr(self.core, "setProperty", None)
+                    else:
+                        setter = getattr(self.camera_device, "setProperty", None)
                     if setter:
                         setter(dev_id, prop, val)
 
@@ -391,9 +400,10 @@ class MMCamera(DataProducer, HardwareDevice):
 
     def get_data(self):
         return getattr(self.camera_device, "get_frame", lambda: None)() if self.is_active else None
-
-    def shutdown(self):          
-        self.camera_device.core.reset()
+    
+    def shutdown(self):
+        if self.backend == "micromanager" and hasattr(self.core, "reset"):
+            self.core.reset()
     
     def __getattr__(self, name: str):
         """
