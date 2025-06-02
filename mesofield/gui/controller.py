@@ -1,7 +1,6 @@
 import os
 from datetime import datetime
 import threading
-import time
 import numpy as np
 
 from qtpy.QtCore import Qt
@@ -29,11 +28,8 @@ from PyQt6.QtGui import QIcon
 from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from mesofield.config import ExperimentConfig
-    from pymmcore_plus import CMMCorePlus
     from mesofield.protocols import Procedure
 
-from mesofield.subprocesses.psychopy import PsychoPyProcess
-from mesofield.io import CustomWriter
 from mesofield.gui import ConfigTableModel
 from .dynamic_controller import DynamicController
 
@@ -64,30 +60,21 @@ class ConfigFormWidget(QWidget):
 
 
 class ConfigController(QWidget):
-    """AcquisitionEngine object for the napari-mesofield plugin.
+    """
+    The ConfigController widget allows selection of a save directory,
+    loading a JSON configuration file, and editing the configuration parameters in a table.
+    
     The object connects to the Micro-Manager Core object instances and the Config object.
-
-    The ConfigController widget is a QWidget that allows the user to select a save directory,
-    load a JSON configuration file, and edit the configuration parameters in a table.
-    The user can also trigger the MDA sequence with the current configuration parameters.
     
     The ConfigController widget emits signals to notify other widgets when the configuration is updated
     and when the record button is pressed.
     
     Public Methods:
     ----------------
-    save_config(): 
-        saves the current configuration to a JSON file
-    
     record(): 
         triggers the MDA sequence with the configuration parameters
-    
-    launch_psychopy(): 
-        launches the PsychoPy experiment as a subprocess with ExperimentConfig parameters
-    
-    show_popup(): 
-        shows a popup message to the user
-    
+
+
     Private Methods:
     ----------------
     _select_directory(): 
@@ -110,21 +97,8 @@ class ConfigController(QWidget):
     # ------------------------------------------------------------------------------------- #
     def __init__(self, cfg: 'ExperimentConfig', procedure: Optional['Procedure'] = None):
         super().__init__()
-        self.mmcores = cfg._cores
-        # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
-
         self.config = cfg
         self.procedure = procedure
-        # Sync registry changes to legacy parameters dict
-        for key in self.config.keys():
-            self.config.register_callback(key, self._on_registry_updated)
-        if len(self.mmcores) == 1:
-            self._mmc: CMMCorePlus = self.mmcores[0]
-        elif len(self.mmcores) == 2:
-            self._mmc1: CMMCorePlus = self.mmcores[0]
-            self._mmc2: CMMCorePlus = self.mmcores[1]
-
-        self.psychopy_process = None
 
         # Create main layout
         layout = QVBoxLayout(self)
@@ -186,36 +160,8 @@ class ConfigController(QWidget):
             }
         """)        
         layout.addWidget(self.record_button)
-
-        # Procedure-specific controls (only shown when procedure is available)
-        if self.procedure is not None:
-            # Add procedure info label
-            procedure_name = self.procedure.__class__.__name__
-            self.procedure_label = QLabel(f"Procedure: {procedure_name}")
-            self.procedure_label.setStyleSheet("QLabel { font-weight: bold; color: #2196F3; }")
-            layout.addWidget(self.procedure_label)
-            
-            # Add procedure configuration button
-            self.configure_procedure_button = QPushButton("Configure Procedure")
-            self.configure_procedure_button.setStyleSheet("""
-                QPushButton {
-                background-color: #2196F3; /* Blue */
-                border: none;
-                padding: 6px 12px;
-                border-radius: 4px;
-                color: white;
-                }
-                QPushButton:hover {
-                background-color: #1976D2;
-                }
-                QPushButton:pressed {
-                background-color: #0D47A1;
-                }
-            """)
-            layout.addWidget(self.configure_procedure_button)
-            
-            # Connect procedure configuration button
-            self.configure_procedure_button.clicked.connect(self._configure_procedure)
+        self.record_button.setToolTip("Start Recording (MDA Sequence)")
+        self.record_button.setShortcut("Ctrl+R")  # Set shortcut for recording
 
         # 5. Add Note button to add a note to the configuration
         self.add_note_button = QPushButton("Add Note")
@@ -232,13 +178,13 @@ class ConfigController(QWidget):
         self.json_dropdown.currentIndexChanged.connect(self._update_config)
         self.record_button.clicked.connect(self.record)
         self.add_note_button.clicked.connect(self._add_note)
-        
+
         # Connect dynamic controls using constants defined in DynamicController
         dynamic_buttons = [
             (DynamicController.LED_TEST_BTN, self._test_led),
             (DynamicController.STOP_BTN, self._stop_led),
             (DynamicController.SNAP_BTN, lambda: self._save_snapshot(self._mmc1.snap())),
-            (DynamicController.PSYCHOPY_BTN, self.launch_psychopy),
+            #(DynamicController.PSYCHOPY_BTN, self.launch_psychopy),
         ]
         for btn_attr, handler in dynamic_buttons:
             if hasattr(self.dynamic_controller, btn_attr):
@@ -248,43 +194,6 @@ class ConfigController(QWidget):
 
     # ============================== Public Class Methods ============================================ #
 
-    def _save_snapshot(self, image: np.ndarray):
-        """Creates a PyQt popup window for saving the snapped image."""
-        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-        from matplotlib.figure import Figure
-
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Save Snapped Image")
-        layout = QVBoxLayout(dialog)
-
-        fig = Figure()
-        canvas = FigureCanvas(fig)
-        ax = fig.add_subplot(111)
-        ax.imshow(image, cmap='gray')
-        layout.addWidget(canvas)
-        
-        # Save button
-        save_button = QPushButton("Save", dialog)
-        layout.addWidget(save_button)
-
-        save_button.clicked.connect(lambda: self._save_image(image, dialog))
-
-        dialog.exec()
-
-    def _save_image(self, image: np.ndarray, dialog: QDialog):
-        """Save the snapped image to the specified directory with a unique filename."""
-
-        # Generate a unique filename with a timestamp
-        file_path = self.config.make_path(suffix="snapped", extension="png", bids_type="func")
-
-        # Save the image as a PNG file using matplotlib
-        import matplotlib.pyplot as plt
-
-        plt.imsave(file_path, image, cmap='gray')
-
-        # Close the dialog
-        dialog.accept()    
-    
     def record(self):
         """Run the experimental procedure or fallback to legacy MDA sequence."""
         
@@ -303,47 +212,8 @@ class ConfigController(QWidget):
                 QMessageBox.critical(self, "Procedure Error", f"Failed to run procedure: {str(e)}")
                 return
 
-    def launch_psychopy(self):
-        """Launches a PsychoPy experiment as a subprocess with the current ExperimentConfig parameters."""
-        # use PsychoPyProcess to manage handshake and subprocess
-        self.psychopy_process = PsychoPyProcess(self.config, parent=self)
-        self.psychopy_process.error.connect(self._on_psychopy_error)
-        self.psychopy_process.start()
-
-    def _on_psychopy_error(self, message):
-        """Handle PsychoPyProcess error signal (e.g. handshake timeout)."""
-        QMessageBox.critical(self, "PsychoPy Error", message)
-    
-    def _run_procedure(self):
-        """Run the procedure in a separate thread."""
-        try:
-            self.procedure.run()
-        except Exception as e:
-            # Handle errors in the procedure execution
-            # Since this runs in a thread, we need to emit a signal or use Qt's invokeMethod
-            # For now, we'll print the error (in a real implementation, you'd want proper error handling)
-            print(f"Procedure execution error: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Space:
-            self.event_loop.quit()
-    
-    def show_popup(self):
-        msg_box = QMessageBox()
-        msg_box.setText("PsychoPy is Ready:\n Press spacebar to start recording.")
-        #msg_box.setStandardButtons(QMessageBox.Ok)
-        msg_box.exec_()
-    
-    def save_config(self):
-        """ Save the current configuration to a JSON file """
-        self.config.save_parameters()
-        
-    #TODO: add breakdown method
-
     #-----------------------------------------------------------------------------------------------#
-    
+
     #============================== Private Class Methods ==========================================#
 
     def _select_directory(self):
@@ -386,6 +256,43 @@ class ConfigController(QWidget):
                 print(f"Trouble updating ExperimentConfig from AcquisitionEngine:\n{json_path_input}\nConfiguration not updated.")
                 print(e) 
 
+    def _save_snapshot(self, image: np.ndarray):
+        """Creates a PyQt popup window for saving the snapped image."""
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.figure import Figure
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Save Snapped Image")
+        layout = QVBoxLayout(dialog)
+
+        fig = Figure()
+        canvas = FigureCanvas(fig)
+        ax = fig.add_subplot(111)
+        ax.imshow(image, cmap='gray')
+        layout.addWidget(canvas)
+        
+        # Save button
+        save_button = QPushButton("Save", dialog)
+        layout.addWidget(save_button)
+
+        save_button.clicked.connect(lambda: self._save_image(image, dialog))
+
+        dialog.exec()
+
+    def _save_image(self, image: np.ndarray, dialog: QDialog):
+        """Save the snapped image to the specified directory with a unique filename."""
+
+        # Generate a unique filename with a timestamp
+        file_path = self.config.make_path(suffix="snapped", extension="png", bids_type="func")
+
+        # Save the image as a PNG file using matplotlib
+        import matplotlib.pyplot as plt
+
+        plt.imsave(file_path, image, cmap='gray')
+
+        # Close the dialog
+        dialog.accept()
+
     def _test_led(self):
         """
         Test the LED pattern by sending a test sequence to the Arduino-Switch device.
@@ -420,49 +327,6 @@ class ConfigController(QWidget):
             note_with_timestamp = f"{time}: {text}"
             self.config.notes.append(note_with_timestamp)
 
-    def _configure_procedure(self):
-        """
-        Open a dialog to configure procedure parameters.
-        """
-        if self.procedure is None:
-            return
-            
-        # Create a simple configuration dialog
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QDialogButtonBox
-        
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Configure {self.procedure.__class__.__name__}")
-        dialog.setModal(True)
-        
-        layout = QVBoxLayout(dialog)
-        
-        # Add procedure configuration form if the procedure has a config
-        if hasattr(self.procedure, 'config') and self.procedure.config:
-            config_form = ConfigFormWidget(self.procedure.config)
-            layout.addWidget(config_form)
-        else:
-            # Show a simple message if no configuration is available
-            info_label = QLabel("This procedure has no configurable parameters.")
-            layout.addWidget(info_label)
-        
-        # Add OK/Cancel buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.accepted.connect(dialog.accept)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
-        
-        # Show the dialog
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Configuration changes are automatically applied through the form widget
-            QMessageBox.information(self, "Configuration", "Procedure configuration updated.")
-
-    def _on_registry_updated(self, key, value):
-        """Callback to sync registry changes into ExperimentConfig._parameters."""
-        try:
-            self.config._parameters[key] = value
-        except Exception:
-            pass
-        self.configUpdated.emit(self.config)
 
     # ----------------------------------------------------------------------------------------------- #
 
