@@ -12,16 +12,21 @@ When implementing these protocols, there are two approaches:
 1. Direct inheritance (for regular classes without metaclass conflicts):
    ```python
    class MySensor(DataAcquisitionDevice):
-       # Implement required methods and attributes
+       def __init__(self):
+           self._init_logger()  # Initialize logging
+           # Implement required methods and attributes
    ```
 
 2. Duck typing (for classes with existing inheritance or metaclass conflicts, e.g., QThread):
    ```python
    class MyQThreadSensor(QThread):  # Cannot inherit from Protocol due to metaclass conflict
-       # Implement all required methods and attributes
-       device_type = "sensor"
-       device_id = "my_sensor"
-       # etc.
+       def __init__(self):
+           super().__init__()
+           self._init_logger()  # Initialize logging manually
+           # Implement all required methods and attributes
+           self.device_type = "sensor"
+           self.device_id = "my_sensor"
+           # etc.
    ```
 
 The second approach is necessary for Qt classes (QObject, QThread, QWidget) or 
@@ -29,6 +34,7 @@ any class that already uses a metaclass. Protocol checking uses duck typing
 internally, so both approaches will work with our system.
 """
 
+import logging
 from typing import Dict, List, Any, Optional, Protocol, TypeVar, Generic, runtime_checkable
 
 T = TypeVar('T')
@@ -37,7 +43,24 @@ T = TypeVar('T')
 # and documentation, but should not be used for inheritance with classes that
 # already have a metaclass (like QThread)
 
-
+class LoggingMixin:
+    """Simple mixin to add logging to any class."""
+    
+    def _init_logger(self):
+        """Initialize a logger for this instance."""
+        try:
+            from .._logger import get_logger
+            self.logger = get_logger(self.__class__.__name__)
+        except ImportError:
+            # Fallback if centralized logging isn't available
+            import logging
+            self.logger = logging.getLogger(self.__class__.__name__)
+            if not self.logger.handlers:
+                handler = logging.StreamHandler()
+                formatter = logging.Formatter('%(name)s | %(levelname)s | %(message)s')
+                handler.setFormatter(formatter)
+                self.logger.addHandler(handler)
+                self.logger.setLevel(logging.INFO)
 
 # Define configuration interface
 class Configurator(Protocol):
@@ -77,6 +100,7 @@ class Procedure(Protocol):
         Returns:
             bool: True if setup was successful, False otherwise.
         """
+        ...
     
     def setup_configuration(self, json_config: str) -> None:
         """Set up the configuration for the experiment procedure.
@@ -104,7 +128,7 @@ class HardwareDevice(Protocol):
     
     device_type: str
     device_id: str
-    config: Dict[str, Any]
+    #config: Dict[str, Any]
     
     def initialize(self) -> bool:
         """Initialize the hardware device.
