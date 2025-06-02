@@ -108,7 +108,7 @@ class ConfigController(QWidget):
     configUpdated = pyqtSignal(object)
     recordStarted = pyqtSignal(str)
     # ------------------------------------------------------------------------------------- #
-      def __init__(self, cfg: 'ExperimentConfig', procedure: Optional['Procedure'] = None):
+    def __init__(self, cfg: 'ExperimentConfig', procedure: Optional['Procedure'] = None):
         super().__init__()
         self.mmcores = cfg._cores
         # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
@@ -302,38 +302,6 @@ class ConfigController(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Procedure Error", f"Failed to run procedure: {str(e)}")
                 return
-        
-        # Legacy MDA sequence logic (fallback when no procedure is provided)
-        # TODO: Add a check for the MDA sequence and pupil sequence
-        # TODO: Fix this ugly logic :)
-        if len(self.mmcores) == 1:
-            self.writer = CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))
-        elif len(self.mmcores) == 2:        
-            self.thread1 = threading.Thread(target=self._mmc1.run_mda, 
-                                       args=(self.config.build_sequence(self.config.hardware.cameras[0]),), 
-                                       kwargs={'output': CustomWriter(self.config.make_path("meso", "ome.tiff", bids_type="func"))})
-            self.thread2 = threading.Thread(target=self._mmc2.run_mda, 
-                                       args=(self.config.build_sequence(self.config.hardware.cameras[1]),), 
-                                       kwargs={'output': CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))})
-
-        # Wait for spacebar press if start_on_trigger is True
-        if self.config.start_on_trigger:
-            proc = self.launch_psychopy()
-            # abort if PsychoPy failed to initialize
-            # if not getattr(proc, '_handshake_ok', False):
-            #     return
-
-        self.config.hardware.encoder.start_recording(self.config.make_path('treadmill_data', 'csv', 'beh'))
-        if len(self.mmcores) == 2:        
-            self.thread1.start()
-            time.sleep(0.5)
-            self.thread2.start()
-        else:
-            self.thread0 = self._mmc.run_mda(self.config.build_sequence(self.config.hardware.cameras[0]), output=self.writer)
-
-        # Signals to start the MDA sequence and pass a formatted timestamp
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.recordStarted.emit(timestamp)
 
     def launch_psychopy(self):
         """Launches a PsychoPy experiment as a subprocess with the current ExperimentConfig parameters."""

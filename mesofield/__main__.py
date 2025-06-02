@@ -49,58 +49,31 @@ def cli():
 
 
 @cli.command()
-@click.option('--params', default='hardware.yaml', help='Path to the config file')
-@click.option('--procedure', default=None, help='Python module path to custom procedure class (e.g., mymodule.MyProcedure)')
+@click.option('--params', default='dev.yaml', help='Path to the config file')
 @click.option('--procedure-config', default=None, help='Path to procedure-specific configuration file')
 @click.option('--experiment-id', default='default', help='Unique identifier for the experiment')
 @click.option('--experimentor', default='researcher', help='Name of the person running the experiment')
-def launch(params, procedure, procedure_config, experiment_id, experimentor):
+def launch(params, procedure_config, experiment_id, experimentor):
     from PyQt6.QtWidgets import QApplication
     from mesofield.gui.maingui import MainWindow
+    from mesofield.base import MesofieldProcedure, create_procedure
     from mesofield.config import ExperimentConfig
-    from mesofield.base import create_procedure, MesofieldProcedure
 
     """Launch the mesofield acquisition interface."""
     print('Launching mesofield acquisition interface...')
     app = QApplication([])
-    config = ExperimentConfig(params)
-    config.hardware._configure_engines(config)
+    # config = ExperimentConfig(params)
+    # config.hardware._configure_engines(config)
     
-    # Create procedure instance
-    if procedure:
-        try:
-            # Import custom procedure class
-            module_path, class_name = procedure.rsplit('.', 1)
-            module = __import__(module_path, fromlist=[class_name])
-            procedure_class = getattr(module, class_name)
-            procedure_instance = create_procedure(
-                procedure_class, 
-                experiment_id=experiment_id,
-                experimentor=experimentor,
-                hardware_yaml=params,
-                json_config=procedure_config
-            )
-            print(f'Using custom procedure: {procedure}')
-        except Exception as e:
-            print(f'Failed to load custom procedure {procedure}: {e}')
-            print('Falling back to default MesofieldProcedure')
-            procedure_instance = create_procedure(
-                MesofieldProcedure, 
-                experiment_id=experiment_id,
-                experimentor=experimentor,
-                hardware_yaml=params,
-                json_config=procedure_config
-            )
-    else:
-        procedure_instance = create_procedure(
-            MesofieldProcedure, 
-            experiment_id=experiment_id,
-            experimentor=experimentor,
-            hardware_yaml=params,
-            json_config=procedure_config
-        )
+    procedure = create_procedure(
+        MesofieldProcedure, 
+        experiment_id=experiment_id,
+        experimentor=experimentor,
+        hardware_yaml=params,
+        json_config=procedure_config
+    )
     
-    mesofield = MainWindow(config, procedure_instance)
+    mesofield = MainWindow(procedure)
     mesofield.show()
     app.exec()
 

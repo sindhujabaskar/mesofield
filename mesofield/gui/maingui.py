@@ -1,4 +1,5 @@
 import os
+from typing import cast
 
 # Necessary modules for the IPython console
 from qtconsole.rich_jupyter_widget import RichJupyterWidget
@@ -17,24 +18,21 @@ from PyQt6.QtCore import QCoreApplication
 from mesofield.gui.mdagui import MDA
 from mesofield.gui.controller import ConfigController
 from mesofield.gui.speedplotter import EncoderWidget
-from typing import TYPE_CHECKING, Optional
-if TYPE_CHECKING:
-    from mesofield.config import ExperimentConfig
-    from mesofield.protocols import Procedure
+from mesofield.config import ExperimentConfig
+from mesofield.protocols import Procedure
 
 class MainWindow(QMainWindow):
-    def __init__(self, cfg: 'ExperimentConfig', procedure: Optional['Procedure'] = None):
+    def __init__(self, procedure: Procedure):
         super().__init__()
-        self.setWindowTitle("Mesofield")
-        self.config = cfg
+        self.config: ExperimentConfig = cast(ExperimentConfig, procedure.config)
         self.procedure = procedure
-
         window_icon = QIcon(os.path.join(os.path.dirname(__file__), "Mesofield_icon.png"))
-        self.setWindowIcon(window_icon)        #============================== Widgets =============================#
+        self.setWindowIcon(window_icon)        
+        #============================== Widgets =============================#
         self.acquisition_gui = MDA(self.config)
-        self.config_controller = ConfigController(self.config, procedure)
+        self.config_controller = ConfigController(self.config)
         self.encoder_widget = EncoderWidget(self.config)
-        self.initialize_console(cfg) # Initialize the IPython console
+        self.initialize_console(self.config) # Initialize the IPython console
         #--------------------------------------------------------------------#
 
         #============================== Layout ==============================#
@@ -79,21 +77,7 @@ class MainWindow(QMainWindow):
                 self.initialize_console()
             else:
                 self.console_widget.show()
-    
-    def plots(self):
-        import mesofield.data.plot as data
-        dh_md_df, th_md_df = data.load_metadata(self.config_controller.config.bids_dir)
-        data.plot_encoder_csv(data.load_wheel_data(self.config_controller.config.bids_dir), data.load_psychopy_data(self.config_controller.config.bids_dir))
-        data.plot_stim_times(data.load_psychopy_data(self.config_controller.config.bids_dir))
-        data.plot_camera_intervals(dh_md_df, th_md_df)
-    
-    def metrics(self):
-        import mesofield.data.plot as data
-        from mesofield.data.metrics import calculate_metrics
-        wheel_df = data.load_wheel_data(self.config_controller.config.bids_dir)
-        stim_df = data.load_psychopy_data(self.config_controller.config.bids_dir)
-        metrics_df = calculate_metrics(wheel_df, stim_df)
-        print(metrics_df)   
+
                 
     def initialize_console(self, cfg):
         """Initialize the IPython console and embed it into the application."""
@@ -121,8 +105,8 @@ class MainWindow(QMainWindow):
         }
         
         # Add procedure to console namespace if available
-        if self.procedure is not None:
-            console_namespace['procedure'] = self.procedure
+        # if self.procedure is not None:
+        #     console_namespace['procedure'] = self.procedure
         
         self.kernel.shell.push(console_namespace)
     #----------------------------------------------------------------------------#
@@ -186,7 +170,6 @@ class MainWindow(QMainWindow):
     def _on_end(self) -> None:
         """Called when the MDA is finished."""
         #self.config_controller.save_config()
-        self.plots()
 
     def _update_config(self, config):
         self.config = config
