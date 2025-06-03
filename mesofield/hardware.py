@@ -119,6 +119,11 @@ class HardwareManager():
         for w in self.yaml.get('encoder', {}).get('widgets', []):
             if w not in widgets:
                 widgets.append(w)
+        # NIDAQ widgets
+        if self.yaml.get('nidaq'):
+            for w in self.yaml['nidaq'].get('widgets', []):
+                if w not in widgets:
+                    widgets.append(w)
         return widgets
 
     def _initialize_devices(self):
@@ -274,25 +279,26 @@ class Nidaq:
                 "lines": self.lines,
                 "io_type": self.io_type
             }
+        self.logger = get_logger(f"{__name__}.{self.__class__.__name__}[{self.device_id}]")
 
     def initialize(self) -> None:
         """Initialize the device."""
         pass
 
     def test_connection(self):
-        print(f"Testing connection to NI-DAQ device: {self.device_name}")
+        self.logger.info(f"Testing connection to NI-DAQ device: {self.device_name}")
         try:
             with nidaqmx.Task() as task:
                 task.do_channels.add_do_chan(f'{self.device_name}/{self.lines}')
                 task.write(True)
                 time.sleep(3)
                 task.write(False)
-            print("Connection successful.")
+            self.logger.info("NI-DAQ connection successful")
         except nidaqmx.DaqError as e:
-            print(f"NI-DAQ connection error: {e}")
+            self.logger.error(f"NI-DAQ connection failed: {e}")
 
     def reset(self):
-        print(f"Resetting NI-DAQ device: {self.device_name}")
+        self.logger.info(f"Resetting NIDAQ device")
         nidaqmx.system.Device(self.device_name).reset_device()
 
     def start(self) -> bool:
