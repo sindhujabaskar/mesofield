@@ -36,6 +36,10 @@ internally, so both approaches will work with our system.
 
 from typing import Dict, List, Any, Optional, Protocol, TypeVar, Generic, runtime_checkable
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from mesofield.hardware import HardwareManager
+
 T = TypeVar('T')
 
 # These are the Protocol definitions - they are useful for static type checking
@@ -46,6 +50,9 @@ T = TypeVar('T')
 # Define configuration interface
 class Configurator(Protocol):
     """Protocol defining the interface for configuration providers."""
+    
+    hardware: "HardwareManager"
+    
     def get(self, key: str, default: Any = None) -> Any:
         """Retrieve a configuration value for the given key."""
         ...

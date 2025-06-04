@@ -4,7 +4,10 @@ viewer_type: "static"
 nidaq:
   device_name: "Dev1"
   lines: "port2/line0"
+  ctr: "ctr0"
   io_type: "DO"
+  widgets:
+    - "nidaq_test"
 
 encoder:
   type: "wheel"
@@ -20,12 +23,13 @@ cameras:
     name: "devcam1"
     backend: "micromanager"
     micromanager_path: "C:/Program Files/Micro-Manager-2.0"
+    viewer_type: "static"
 
 
-  - id: "dev"
-    name: "devcam2"
-    backend: "micromanager"
-    micromanager_path: "C:/Program Files/Micro-Manager-thor"
+  # - id: "dev"
+  #   name: "devcam2"
+  #   backend: "micromanager"
+  #   micromanager_path: "C:/Program Files/Micro-Manager-thor"
 
 
 

@@ -95,7 +95,7 @@ class ConfigController(QWidget):
     configUpdated = pyqtSignal(object)
     recordStarted = pyqtSignal(str)
     # ------------------------------------------------------------------------------------- #
-    def __init__(self, cfg: 'ExperimentConfig', procedure: Optional['Procedure'] = None):
+    def __init__(self, cfg: 'ExperimentConfig', procedure: 'Procedure'):
         super().__init__()
         self.config = cfg
         self.procedure = procedure
@@ -184,6 +184,7 @@ class ConfigController(QWidget):
             (DynamicController.LED_TEST_BTN, self._test_led),
             (DynamicController.STOP_BTN, self._stop_led),
             (DynamicController.SNAP_BTN, lambda: self._save_snapshot(self._mmc1.snap())),
+            (DynamicController.NIDAQ_BTN, self._test_nidaq),
             #(DynamicController.PSYCHOPY_BTN, self.launch_psychopy),
         ]
         for btn_attr, handler in dynamic_buttons:
@@ -327,7 +328,11 @@ class ConfigController(QWidget):
             note_with_timestamp = f"{time}: {text}"
             self.config.notes.append(note_with_timestamp)
 
-
+    def _test_nidaq(self):
+        """
+        PUlse the nidaq device to test its functionality.
+        """
+        self.procedure.config.hardware.get_device('nidaq').start()
     # ----------------------------------------------------------------------------------------------- #
 
 
