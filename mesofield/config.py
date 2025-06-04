@@ -204,7 +204,7 @@ class ExperimentConfig(ConfigRegister):
     @property
     def num_trials(self) -> int:
         """Calculate the number of trials."""
-        return int(self._parameters.get('num_trials', 1))
+        return int(self.get("num_trials", self._parameters.get('num_trials', 1)))
     
     @property
     def parameters(self) -> dict:
@@ -380,7 +380,6 @@ class ExperimentConfig(ConfigRegister):
             
     def save_configuration(self):
         """ Save the configuration parameters from the registry to a CSV file """
-        self.logger.info("Saving configuration and notes")
         params_path = self.make_path(suffix="configuration", extension="csv")
         try:
             # Get all parameters from the registry
