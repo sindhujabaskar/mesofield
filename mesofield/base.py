@@ -7,8 +7,7 @@ with the Mesofield configuration and hardware management systems.
 
 import os
 import abc
-import time
-import threading
+from datetime import datetime
 
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Type, List
@@ -18,7 +17,17 @@ from mesofield.hardware import HardwareManager
 from mesofield.io.manager import DataManager
 from mesofield.utils._logger import get_logger
 from mesofield.io.writer import CustomWriter
+from PyQt6.QtCore import QObject, pyqtSignal
 
+class ProcedureSignals(QObject):
+    """All procedure-level signals that a Qt GUI can connect to."""
+    procedure_started      = pyqtSignal()
+    hardware_initialized   = pyqtSignal(bool)     # success
+    data_saved             = pyqtSignal()
+    procedure_error        = pyqtSignal(str)      # emits error message
+    procedure_finished     = pyqtSignal()
+    
+    
 @dataclass 
 class ProcedureConfig:
     """Configuration container for procedures."""
@@ -40,6 +49,8 @@ class BaseProcedure(abc.ABC):
     """
     
     def __init__(self, procedure_config: ProcedureConfig):
+        self.events = ProcedureSignals()
+        
         self.experiment_id = procedure_config.experiment_id
         self.experimentor = procedure_config.experimentor
         self.hardware_yaml = procedure_config.hardware_yaml
@@ -77,7 +88,7 @@ class BaseProcedure(abc.ABC):
         """Access to the hardware manager."""
         return self._config.hardware
         
-    def initialize_hardware(self) -> bool:
+    def initialize_hardware(self):
         """Setup the experiment procedure hardware.
         
         Returns:
@@ -101,36 +112,19 @@ class BaseProcedure(abc.ABC):
                     registered_count += 1
             
             self.logger.info("Hardware initialized successfully")
-            return True
+            self.events.hardware_initialized.emit(True)
         except Exception as e:
             self.logger.error(f"Failed to initialize hardware: {e}")
-            return False
+            self.events.hardware_initialized.emit(False)
+
     
     def setup_configuration(self, json_config: Optional[str]) -> None:
-        """Set up the configuration for the experiment procedure.
-        
-        Args:
-            json_config: Path to a JSON configuration file (.json)
-        """
+        """Set up the configuration for the experiment procedure."""
 
     
     def save_data(self) -> None:
         """Save data from the experiment."""
-        try:
-            # Save configuration parameters
-            self.config.save_configuration()
-            
-            # Save any notes
-            if self.config.notes:
-                notes_path = os.path.join(self.data_dir, "experiment_notes.txt")
-                with open(notes_path, 'w') as f:
-                    for note in self.config.notes:
-                        f.write(f"{note}\n")
-            
-            self.logger.info("Data saved successfully")
-        except Exception as e:
-            self.logger.error(f"Failed to save data: {e}")
-            raise
+
     
     def cleanup(self) -> None:
         """Clean up after the experiment procedure."""
@@ -146,61 +140,7 @@ class BaseProcedure(abc.ABC):
         """Run the experiment procedure. Must be implemented by subclasses."""
         pass
     
-    # Additional helper methods for common experimental tasks
-    
-    def start_cameras(self) -> bool:
-        """Start all camera devices."""
-        try:
-            for camera in self.config.hardware.cameras:
-                if hasattr(camera, 'start'):
-                    camera.start()
-            return True
-        except Exception as e:
-            self.logger.error(f"Failed to start cameras: {e}")
-            return False
-    
-    def stop_cameras(self) -> bool:
-        """Stop all camera devices."""
-        try:
-            for camera in self.config.hardware.cameras:
-                if hasattr(camera, 'stop'):
-                    camera.stop()
-            return True
-        except Exception as e:
-            self.logger.error(f"Failed to stop cameras: {e}")
-            return False
-    
-    def start_encoder(self) -> bool:
-        """Start the encoder device if available."""
-        try:
-            encoder = self.config.hardware.get_encoder()
-            if encoder and hasattr(encoder, 'start_recording'):
-                encoder.start_recording(self.config.make_path('treadmill_data', 'csv', 'beh'))
-                return True
-            return False
-        except Exception as e:
-            self.logger.error(f"Failed to start encoder: {e}")
-            return False
-    
-    def stop_encoder(self) -> bool:
-        """Stop the encoder device if available."""
-        try:
-            encoder = self.config.hardware.get_encoder()
-            if encoder and hasattr(encoder, 'stop'):
-                encoder.stop()
-                return True
-            return False
-        except Exception as e:
-            self.logger.error(f"Failed to stop encoder: {e}")
-            return False
-    
-    def add_note(self, note: str) -> None:
-        """Add a timestamped note to the experiment."""
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        timestamped_note = f"{timestamp}: {note}"
-        self.config.notes.append(timestamped_note)
-        self.logger.info(f"Added note: {note}")
+
 
 
 class MesofieldProcedure(BaseProcedure):
@@ -220,9 +160,6 @@ class MesofieldProcedure(BaseProcedure):
         default_params = {
             "duration": 60,  # seconds
             "start_on_trigger": False,
-            "use_psychopy": False,
-            "auto_start_cameras": True,
-            "auto_start_encoder": True,
         }
         
         # Merge with any custom parameters
@@ -255,15 +192,16 @@ class MesofieldProcedure(BaseProcedure):
                 )
                 for cam in self.hardware.cameras
             ]
-
+            self.hardware.cameras[0].core.mda.events.sequenceFinished.connect(self._cleanup_procedure)
+            
             # Optionally launch PsychoPy trigger
             if self.config.get("start_on_trigger", False):
-                self._launch_psychopy()
-
+                self.psychopy_process = self._launch_psychopy()
+                self.psychopy_process.start()
+            self.start_time = datetime.now()    
+            self.start_encoder()     
+            
             # Start encoder recording
-            self.config.hardware.get_encoder().start_recording(
-                self.config.make_path("treadmill_data", "csv", "beh")
-            )
             # Run all cameras
             for mmc, sequence, writer in recorders:
                 mmc.run_mda(sequence, output=writer, block=False)
@@ -273,17 +211,41 @@ class MesofieldProcedure(BaseProcedure):
             self.logger.error(f"Error during experiment: {e}")
             raise
         
-    
+    def save_data(self) -> None:
+        import csv
+
+        try:
+            # Save configuration parameters
+            self.config.save_configuration()
+            timestamps_path = os.path.join(self.data_dir, "timestamps.csv")
+            with open(timestamps_path, "w", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(["device_id", "started", "stopped"])
+                writer.writerow(["experiment_id", self.start_time, self.stopped_time])
+                for device_id, device in self.hardware.devices.items():
+                    started = getattr(device, "_started", "")
+                    stopped = getattr(device, "_stopped", "")
+                    writer.writerow([device_id, started, stopped])
+                    
+            # Save any notes
+            if self.config.notes:
+                notes_path = os.path.join(self.data_dir, "experiment_notes.txt")
+                with open(notes_path, 'w') as f:
+                    for note in self.config.notes:
+                        f.write(f"{note}\n")
+            
+            self.logger.info("Data saved successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to save data: {e}")
+            
+            raise
+        
     def _launch_psychopy(self):
         """Launch PsychoPy subprocess if configured."""
-        try:
-            from mesofield.subprocesses.psychopy import PsychoPyProcess
-            psychopy_process = PsychoPyProcess(self.config)
-            psychopy_process.start()
-            return psychopy_process
-        except Exception as e:
-            self.logger.error(f"Failed to launch PsychoPy: {e}")
-            return None
+        from mesofield.subprocesses.psychopy import PsychoPyProcess
+        proc = PsychoPyProcess(self.config)
+        return proc
+
     
     def _wait_for_trigger(self):
         """Wait for external trigger to start recording."""
@@ -296,13 +258,68 @@ class MesofieldProcedure(BaseProcedure):
         self.logger.info("Cleanup Procedure")
 
         try:
+            del(self.psychopy_process)
             self.stop_cameras()
             self.stop_encoder()
+            self.stopped_time = datetime.now()
             self.save_data()
             self.cleanup()
         except Exception as e:
             self.logger.error(f"Error during cleanup: {e}")
-
+    
+    def start_cameras(self) -> bool:
+        """Start all camera devices."""
+        try:
+            for camera in self.config.hardware.cameras:
+                if hasattr(camera, 'start'):
+                    camera.start()
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to start cameras: {e}")
+            return False
+    
+    def stop_cameras(self) -> bool:
+        """Stop all camera devices."""
+        try:
+            for camera in self.config.hardware.cameras:
+                if hasattr(camera, 'stop'):
+                    camera.stop()
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to stop cameras: {e}")
+            return False
+    
+    def start_encoder(self) -> bool:
+        """Start the encoder device if available."""
+        try:
+            encoder = self.config.hardware.get_encoder()
+            if encoder and hasattr(encoder, 'start_recording'):
+                encoder.start_recording(self.config.make_path(encoder.device_id, 'csv', 'beh'))
+                return True
+            return False
+        except Exception as e:
+            self.logger.error(f"Failed to start encoder: {e}")
+            return False
+    
+    def stop_encoder(self) -> bool:
+        """Stop the encoder device if available."""
+        try:
+            encoder = self.config.hardware.get_encoder()
+            if encoder and hasattr(encoder, 'stop'):
+                encoder.stop()
+                return True
+            return False
+        except Exception as e:
+            self.logger.error(f"Failed to stop encoder: {e}")
+            return False
+    
+    def add_note(self, note: str) -> None:
+        """Add a timestamped note to the experiment."""
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamped_note = f"{timestamp}: {note}"
+        self.config.notes.append(timestamped_note)
+        self.logger.info(f"Added note: {note}")
 
 # Factory function for creating procedures
 def create_procedure(procedure_class: Type[BaseProcedure], 
