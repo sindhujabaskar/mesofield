@@ -4,9 +4,11 @@ import inspect
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Type, ClassVar, TypeVar, Callable
 import yaml
+import threading 
 
 import nidaqmx.system
 import nidaqmx
+from nidaqmx.constants import Edge
 from pymmcore_plus import CMMCorePlus, DeviceType
 
 from mesofield.engines import DevEngine, MesoEngine, PupilEngine
@@ -139,7 +141,8 @@ class HardwareManager():
             self.nidaq = Nidaq(
                 device_name=params.get('device_name'),
                 lines=params.get('lines'),
-                io_type=params.get('io_type')
+                io_type=params.get('io_type'),
+                ctr=params.get('crt', 'ctr0'),
             )
             self.devices["nidaq"] = self.nidaq
         else:
@@ -267,6 +270,7 @@ class Nidaq:
     """
     device_name: str
     lines: str
+    ctr: str
     io_type: str
     device_type: ClassVar[str] = "nidaq"
     device_id: str = "nidaq"
@@ -280,6 +284,12 @@ class Nidaq:
                 "io_type": self.io_type
             }
         self.logger = get_logger(f"{__name__}.{self.__class__.__name__}[{self.device_id}]")
+        self.pulse_width = 0.001
+        self.poll_interval = 0.01
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._lock = threading.Lock()
+        self._exposure_times: list[float] = []
 
     def initialize(self) -> None:
         """Initialize the device."""
@@ -301,18 +311,64 @@ class Nidaq:
         self.logger.info(f"Resetting NIDAQ device")
         nidaqmx.system.Device(self.device_name).reset_device()
 
-    def start(self) -> bool:
-        """Start the device."""
-        return True
+    def start(self):
+        # Configure and start the CI task
+        self._ci = nidaqmx.Task()
+        self._ci.ci_channels.add_ci_count_edges_chan(
+            f"{self.device_name}/{self.ctr}", edge=Edge.RISING, initial_count=0
+        )
+        self._ci.start()
+
+        # Configure the DO task (camera trigger)
+        self._do = nidaqmx.Task()
+        self._do.do_channels.add_do_chan(f"{self.device_name}/{self.lines}")
+
+        # Launch background thread
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._worker, daemon=True)
+        self._thread.start()
+
+    def _worker(self):
+        prev_count = 0
+        while not self._stop_event.is_set():
+            # 1) Trigger camera
+            self._do.write(True)
+            time.sleep(self.pulse_width)
+            self._do.write(False)
+
+            # 2) Read count & timestamp
+            cnt = self._ci.read()
+            ts = time.time()
+
+            # 3) For each new edge, record the same timestamp
+            if cnt > prev_count:
+                with self._lock:
+                    self._exposure_times.extend([ts] * (cnt - prev_count))
+                prev_count = cnt
+
+            # 4) Wait before next trigger
+            time.sleep(self.poll_interval)
+
+        # Cleanup when stopping
+        self._ci.stop()
+        self._ci.close()
+        self._do.close()
     
     def stop(self) -> bool:
-        """Stop the device."""
-        return True
+        """Signal the background thread to stop and wait for it."""
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join()
     
     def shutdown(self) -> None:
         """Close the device."""
-        pass
+        self.stop()
     
+    def get_exposure_times(self) -> list[float]:
+        """Retrieve a copy of the host-time exposure timestamps."""
+        with self._lock:
+            return list(self._exposure_times)
+        
     def get_status(self) -> Dict[str, Any]:
         """Get the status of the device."""
         return {"status": "ok"}

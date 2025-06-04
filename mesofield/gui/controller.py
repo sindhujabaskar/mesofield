@@ -95,7 +95,7 @@ class ConfigController(QWidget):
     configUpdated = pyqtSignal(object)
     recordStarted = pyqtSignal(str)
     # ------------------------------------------------------------------------------------- #
-    def __init__(self, cfg: 'ExperimentConfig', procedure: Optional['Procedure'] = None):
+    def __init__(self, cfg: 'ExperimentConfig', procedure: 'Procedure'):
         super().__init__()
         self.config = cfg
         self.procedure = procedure
@@ -332,7 +332,7 @@ class ConfigController(QWidget):
         """
         PUlse the nidaq device to test its functionality.
         """
-        self.procedure.config.hardware.get_device('nidaq').test_connection()
+        self.procedure.config.hardware.get_device('nidaq').start()
     # ----------------------------------------------------------------------------------------------- #
 
 
