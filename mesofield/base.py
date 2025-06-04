@@ -217,7 +217,7 @@ class MesofieldProcedure(BaseProcedure):
         try:
             # Save configuration parameters
             self.config.save_configuration()
-            timestamps_path = os.path.join(self.data_dir, "timestamps.csv")
+            timestamps_path = os.path.join(self.config.bids_dir, "timestamps.csv")
             with open(timestamps_path, "w", newline="") as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow(["device_id", "started", "stopped"])
@@ -258,7 +258,8 @@ class MesofieldProcedure(BaseProcedure):
         self.logger.info("Cleanup Procedure")
 
         try:
-            del(self.psychopy_process)
+            if hasattr(self, "psychopy_process"):
+                del(self.psychopy_process)
             self.stop_cameras()
             self.stop_encoder()
             self.stopped_time = datetime.now()
