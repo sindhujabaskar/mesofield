@@ -36,6 +36,8 @@ The `DataManager` provides a centralized system for:
 - Managing data streams from multiple devices
 - Real-time data processing
 - Buffering and accessing data
+- Global timestamp synchronization for all registered data streams
+- CSV export utilities for saving collected data
 
 The GUI components include live views for cameras (with optional pyqtgraph ImageView), encoder velocity plots, buttons for hardware control, and an iPython terminal for access to the backend.
 
