@@ -74,6 +74,7 @@ class Procedure:
 
         self.logger = get_logger(f"PROCEDURE.{self.experiment_id}")
         self.logger.info(f"Initialized procedure: {self.experiment_id}")
+        self.initialize_hardware()
 
     # ------------------------------------------------------------------
     # Convenience accessors
@@ -93,6 +94,7 @@ class Procedure:
             self._config.hardware.initialize_all()
             self._config.hardware._configure_engines(self._config)
             self.data_manager = DataManager()
+            self.data_manager.set_config(self._config)
             for device in self._config.hardware.devices.values():
                 if hasattr(device, "device_type") and hasattr(device, "get_data"):
                     self.data_manager.register_hardware_device(device)
@@ -139,7 +141,11 @@ class Procedure:
     def save_data(self) -> None:
         import csv
 
-        self._config.save_configuration()
+        if hasattr(self, "data_manager") and getattr(self.data_manager, "saver", None):
+            self.data_manager.saver.save_config()
+            self.data_manager.saver.save_notes()
+        else:
+            self._config.save_configuration()
         timestamps_path = os.path.join(self._config.bids_dir, "timestamps.csv")
         with open(timestamps_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
@@ -149,12 +155,6 @@ class Procedure:
                 started = getattr(device, "_started", "")
                 stopped = getattr(device, "_stopped", "")
                 writer.writerow([device_id, started, stopped])
-
-        if self._config.notes:
-            notes_path = os.path.join(self.data_dir, "experiment_notes.txt")
-            with open(notes_path, "w") as f:
-                for note in self._config.notes:
-                    f.write(f"{note}\n")
 
         self.logger.info("Data saved successfully")
 

@@ -112,13 +112,15 @@ class MesoEngine(MDAEngine):
         
         # Stop the Arduino LED Sequence
         self._mmc.getPropertyObject('Arduino-Switch', 'State').stopSequence()
-        # Stop the SerialWorker collecting encoder data
-        self._encoder.stop_recording()
-        # self._encoder.shutdown()
-        # Get and store the encoder data
-        # self._wheel_data = self._encoder.get_data()
-        # self._config.save_wheel_encoder_data(self._wheel_data)
-        self._config.save_configuration()
+        # Stop the SerialWorker collecting encoder data and save
+        data = self._encoder.stop_recording()
+        dm = DataManager()
+        if getattr(dm, "saver", None):
+            if data:
+                dm.saver.save_encoder_data(data)
+            dm.saver.save_config()
+        else:
+            self._config.save_configuration()
         pass
     
 
