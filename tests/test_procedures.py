@@ -10,7 +10,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from mesofield.config import ExperimentConfig
-from mesofield.procedures import create_procedure
+from mesofield.base import create_procedure
 from mesofield.examples.custom_procedures import create_custom_procedure
 
 
@@ -27,10 +27,10 @@ def test_basic_procedure():
     else:
         config = ExperimentConfig(config_path)
     
-    # Test MesofieldProcedure creation
+    # Test Procedure creation
     try:
         procedure = create_procedure(
-            'MesofieldProcedure', 
+            'Procedure',
             config,
             experiment_id="test_001",
             experimentor="test_user",
@@ -41,7 +41,7 @@ def test_basic_procedure():
         print(f"  Experimentor: {procedure.config.experimentor}")
         
     except Exception as e:
-        print(f"✗ Failed to create MesofieldProcedure: {e}")
+        print(f"✗ Failed to create Procedure: {e}")
         return False
     
     return True
@@ -90,7 +90,7 @@ def test_procedure_configuration():
     print("\nTesting procedure configuration...")
     
     try:
-        from mesofield.procedures import ProcedureConfig
+        from mesofield.base import ProcedureConfig
         
         # Test ProcedureConfig creation
         config = ProcedureConfig(

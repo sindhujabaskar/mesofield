@@ -14,13 +14,13 @@ The Mesofield procedure system allows you to:
 
 ### 1. Basic Procedure Structure
 
-All custom procedures should inherit from either `BaseProcedure` or `MesofieldProcedure`:
+All custom procedures should inherit from the `Procedure` class:
 
 ```python
-from mesofield.procedures import MesofieldProcedure, ProcedureConfig
+from mesofield.base import Procedure, ProcedureConfig
 from mesofield.config import ExperimentConfig
 
-class MyCustomProcedure(MesofieldProcedure):
+class MyCustomProcedure(Procedure):
     def __init__(self, config: ExperimentConfig, procedure_config: ProcedureConfig = None):
         super().__init__(config, procedure_config)
         # Add your custom initialization here
@@ -38,15 +38,10 @@ class MyCustomProcedure(MesofieldProcedure):
 
 ### 2. Choosing the Right Base Class
 
-**Use `MesofieldProcedure` when:**
+**Use `Procedure` when:**
 - You want the standard neuroscience workflow (camera recording + encoder tracking)
 - You need to add custom logic to an existing experimental framework
-- You want automatic hardware initialization and cleanup
-
-**Use `BaseProcedure` when:**
-- You need complete control over the experimental workflow
-- You have a non-standard experimental setup
-- You want to implement a completely custom data collection strategy
+- You want automatic hardware initialization and cleanup or full control over the workflow
 
 ## Implementation Examples
 
@@ -59,13 +54,13 @@ See `custom_procedures.py` for complete working examples of:
 
 ### Camera Control
 ```python
-# Start cameras (handled automatically by MesofieldProcedure)
+# Start cameras (handled automatically by Procedure)
 self.start_cameras()
 ```
 
 ### Encoder/Treadmill Control
 ```python
-# Start encoder recording (handled automatically by MesofieldProcedure)
+# Start encoder recording (handled automatically by Procedure)
 self.start_encoder()
 ```
 
