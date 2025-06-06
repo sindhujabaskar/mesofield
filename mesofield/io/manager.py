@@ -2,9 +2,6 @@ import queue
 import time
 import threading
 import asyncio
-import os
-import csv
-from pathlib import Path
 from typing import Dict, List, Any, Optional, TypeVar, Generic, Type, Callable, Set, Union
 from dataclasses import dataclass, field
 import numpy as np
@@ -70,21 +67,14 @@ class DataBuffer(Generic[T]):
 
 class DataStream:
     """Class representing a data stream from a data producer."""
-
-    def __init__(
-        self,
-        producer: DataProducer,
-        buffer_size: int = 1000,
-        time_provider: Optional[Callable[[], float]] = None,
-    ) -> None:
+    
+    def __init__(self, producer: DataProducer, buffer_size: int = 1000):
         self.producer = producer
         self.buffer = DataBuffer(maxsize=buffer_size)
         self.consumers: List[DataConsumer] = []
         self.active = False
         self.thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
-        # Function that provides timestamps for collected data
-        self.time_provider = time_provider or time.time
     
     def start(self) -> bool:
         """Start the data stream."""
@@ -142,14 +132,12 @@ class DataStream:
             data = self.producer.get_data()
             if data is not None:
                 # Create data point with metadata
-                ts = self.time_provider()
                 metadata = {
                     "source": self.producer.name,
                     "type": self.producer.producer_type,
-                    "timestamp": ts,
-                    **self.producer.metadata,
+                    **self.producer.metadata
                 }
-                data_point = DataPoint(data=data, timestamp=ts, metadata=metadata)
+                data_point = DataPoint(data=data, metadata=metadata)
                 
                 # Add to buffer
                 self.buffer.add(data_point)
@@ -187,8 +175,9 @@ class DataManager:
         if cls._instance is None:
             cls._instance = super(DataManager, cls).__new__(cls)
             cls._instance._initialized = False
+            cls._instance._initialized = False
         return cls._instance
-
+    
     def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None):
         if not getattr(self, '_initialized', False):
             self.loop = loop or asyncio.get_event_loop()
@@ -197,19 +186,18 @@ class DataManager:
             self.consumers: Dict[str, DataConsumer] = {}
             # Legacy queue support for backward compatibility
             self._queue = queue.Queue()
-            # Global reference start time for timestamp synchronization
-            self.start_time: Optional[float] = None
             self._initialized = True
-
-    # ------------------------------------------------------------------
-    # Timestamp Management
-    # ------------------------------------------------------------------
-    def _timestamp(self) -> float:
-        """Return a timestamp relative to the manager start time."""
-        if self.start_time is None:
-            # Lazily set the reference if it hasn't been set explicitly
-            self.start_time = time.time()
-        return time.time() - self.start_time
+    
+    
+    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None):
+        if not getattr(self, '_initialized', False):
+            self.loop = loop or asyncio.get_event_loop()
+            self.streams: Dict[str, DataStream] = {}
+            self.lock = threading.Lock()
+            self.consumers: Dict[str, DataConsumer] = {}
+            # Legacy queue support for backward compatibility
+            self._queue = queue.Queue()
+            self._initialized = True
 
     
     def register_producer(self, producer: DataProducer, buffer_size: int = 1000) -> bool:
@@ -226,11 +214,7 @@ class DataManager:
             if producer.name in self.streams:
                 return False
             
-            stream = DataStream(
-                producer=producer,
-                buffer_size=buffer_size,
-                time_provider=self._timestamp,
-            )
+            stream = DataStream(producer=producer, buffer_size=buffer_size)
             self.streams[producer.name] = stream
             
             # Add all compatible consumers to this stream
@@ -310,10 +294,8 @@ class DataManager:
             bool: True if all streams started successfully, False otherwise.
         """
         success = True
-
+        
         with self.lock:
-            if self.start_time is None:
-                self.start_time = time.time()
             for stream in self.streams.values():
                 if not stream.start():
                     success = False
@@ -347,8 +329,7 @@ class DataManager:
         with self.lock:
             if producer_name not in self.streams:
                 return False
-            if self.start_time is None:
-                self.start_time = time.time()
+            
             return self.streams[producer_name].start()
     
     def stop_stream(self, producer_name: str) -> bool:
@@ -475,40 +456,8 @@ class DataManager:
         with self.lock:
             for stream in self.streams.values():
                 result.add(stream.producer.producer_type)
-
+        
         return list(result)
-
-    # ------------------------------------------------------------------
-    # Data Export Utilities
-    # ------------------------------------------------------------------
-    def export_all_to_directory(self, directory: str) -> None:
-        """Export buffered data from all streams to CSV files."""
-        Path(directory).mkdir(parents=True, exist_ok=True)
-
-        with self.lock:
-            for name, stream in self.streams.items():
-                data = stream.get_data()
-                if not data:
-                    continue
-                csv_path = Path(directory) / f"{name}_stream.csv"
-                with open(csv_path, "w", newline="") as f:
-                    writer = None
-                    for dp in data:
-                        row = {"timestamp": dp.timestamp, **dp.metadata, "data": dp.data}
-                        if writer is None:
-                            writer = csv.DictWriter(f, fieldnames=list(row.keys()))
-                            writer.writeheader()
-                        writer.writerow(row)
-
-    def close_consumers(self) -> None:
-        """Close any consumers that expose a close() method."""
-        with self.lock:
-            for consumer in self.consumers.values():
-                if hasattr(consumer, "close"):
-                    try:
-                        consumer.close()
-                    except Exception:
-                        pass
     
     
     # Compatibility with HardwareDevice protocol devices
@@ -579,30 +528,3 @@ class HardwareDeviceAdapter(DataProducer):
         if hasattr(self.device, 'get_status'):
             return self.device.get_status()
         return {}
-
-
-class CSVConsumer:
-    """Simple data consumer that writes incoming data to a CSV file."""
-
-    def __init__(self, file_path: str, accepted_data_types: Optional[List[str]] = None) -> None:
-        self._path = Path(file_path)
-        self._file = open(self._path, "w", newline="")
-        self._writer: Optional[csv.DictWriter] = None
-        self.accepted_data_types = accepted_data_types or ["*"]
-
-    @property
-    def name(self) -> str:  # type: ignore[override]
-        return self._path.stem
-
-    def process_data(self, data: Any, metadata: Dict[str, Any]) -> bool:  # type: ignore[override]
-        row = {"timestamp": metadata.get("timestamp", time.time()), **metadata, "data": data}
-        if self._writer is None:
-            self._writer = csv.DictWriter(self._file, fieldnames=list(row.keys()))
-            self._writer.writeheader()
-        self._writer.writerow(row)
-        self._file.flush()
-        return True
-
-    def close(self) -> None:
-        if not self._file.closed:
-            self._file.close()

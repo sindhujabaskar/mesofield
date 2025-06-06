@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional, Type, List
 
 from mesofield.config import ExperimentConfig
 from mesofield.hardware import HardwareManager
-from mesofield.io.manager import DataManager, CSVConsumer
+from mesofield.io.manager import DataManager
 from mesofield.utils._logger import get_logger
 from mesofield.io.writer import CustomWriter
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -109,9 +109,6 @@ class BaseProcedure(abc.ABC):
             for device_id, device in self.config.hardware.devices.items():
                 if hasattr(device, 'device_type') and hasattr(device, 'get_data'):
                     self.data_manager.register_hardware_device(device)
-                    csv_path = self.config.make_path(device_id, 'csv', 'beh')
-                    consumer = CSVConsumer(csv_path, [getattr(device, 'device_type', '*')])
-                    self.data_manager.register_consumer(consumer)
                     registered_count += 1
             
             self.logger.info("Hardware initialized successfully")
@@ -201,12 +198,11 @@ class MesofieldProcedure(BaseProcedure):
             if self.config.get("start_on_trigger", False):
                 self.psychopy_process = self._launch_psychopy()
                 self.psychopy_process.start()
-            self.start_time = datetime.now()
-
-            # Start all registered data streams
-            self.data_manager.start_all()
-
-            # Start cameras via MDA sequences
+            self.start_time = datetime.now()    
+            self.start_encoder()     
+            
+            # Start encoder recording
+            # Run all cameras
             for mmc, sequence, writer in recorders:
                 mmc.run_mda(sequence, output=writer, block=False)
 
@@ -237,10 +233,7 @@ class MesofieldProcedure(BaseProcedure):
                 with open(notes_path, 'w') as f:
                     for note in self.config.notes:
                         f.write(f"{note}\n")
-
-            # Export buffered stream data to CSV files
-            self.data_manager.export_all_to_directory(self.config.bids_dir)
-
+            
             self.logger.info("Data saved successfully")
         except Exception as e:
             self.logger.error(f"Failed to save data: {e}")
@@ -268,11 +261,9 @@ class MesofieldProcedure(BaseProcedure):
             if hasattr(self, "psychopy_process"):
                 del(self.psychopy_process)
             self.stop_cameras()
-            self.data_manager.stop_all()
             self.stop_encoder()
             self.stopped_time = datetime.now()
             self.save_data()
-            self.data_manager.close_consumers()
             self.cleanup()
         except Exception as e:
             self.logger.error(f"Error during cleanup: {e}")
@@ -303,8 +294,9 @@ class MesofieldProcedure(BaseProcedure):
         """Start the encoder device if available."""
         try:
             encoder = self.config.hardware.get_encoder()
-            if encoder:
-                return self.data_manager.start_stream(encoder.device_id)
+            if encoder and hasattr(encoder, 'start_recording'):
+                encoder.start_recording(self.config.make_path(encoder.device_id, 'csv', 'beh'))
+                return True
             return False
         except Exception as e:
             self.logger.error(f"Failed to start encoder: {e}")
@@ -314,8 +306,9 @@ class MesofieldProcedure(BaseProcedure):
         """Stop the encoder device if available."""
         try:
             encoder = self.config.hardware.get_encoder()
-            if encoder:
-                return self.data_manager.stop_stream(encoder.device_id)
+            if encoder and hasattr(encoder, 'stop'):
+                encoder.stop()
+                return True
             return False
         except Exception as e:
             self.logger.error(f"Failed to stop encoder: {e}")
