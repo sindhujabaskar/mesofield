@@ -112,13 +112,15 @@ class MesoEngine(MDAEngine):
         
         # Stop the Arduino LED Sequence
         self._mmc.getPropertyObject('Arduino-Switch', 'State').stopSequence()
-        # Stop the SerialWorker collecting encoder data
-        self._encoder.stop_recording()
-        # self._encoder.shutdown()
-        # Get and store the encoder data
-        # self._wheel_data = self._encoder.get_data()
-        # self._config.save_wheel_encoder_data(self._wheel_data)
-        self._config.save_configuration()
+        # Stop the SerialWorker collecting encoder data and save
+        data = self._encoder.stop_recording()
+        dm = DataManager()
+        if getattr(dm, "saver", None):
+            if data:
+                dm.saver.save_encoder_data(data)
+            dm.saver.save_config()
+        else:
+            self._config.save_configuration()
         pass
     
 
@@ -253,7 +255,6 @@ class DevEngine(MDAEngine):
         self.use_hardware_sequencing = use_hardware_sequencing
         self._config = None
         self._encoder: SerialWorker = None
-        print('DevEngine initialized')
         
     def set_config(self, cfg) -> None:
         self._config = cfg
@@ -317,9 +318,9 @@ class DevEngine(MDAEngine):
     def teardown_sequence(self, sequence: useq.MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
         logging.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
-        self._encoder.stop()
+        # self._encoder.stop()
         # Get and store the encoder data
-        self._wheel_data = self._encoder.get_data()
-        self._config.save_wheel_encoder_data(self._wheel_data)
-        self._config.save_configuration()
+        # self._wheel_data = self._encoder.get_data()
+        # self._config.save_wheel_encoder_data(self._wheel_data)
+        # self._config.save_configuration()
         pass

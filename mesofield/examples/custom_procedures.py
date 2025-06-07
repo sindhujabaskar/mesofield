@@ -1,7 +1,7 @@
 """
 Example custom procedures demonstrating how to create user-defined experimental workflows.
 
-This module provides examples of how to subclass BaseProcedure or MesofieldProcedure
+This module provides examples of how to subclass :class:`mesofield.base.Procedure`
 to create custom experimental protocols that integrate with the Mesofield GUI.
 """
 
@@ -9,15 +9,15 @@ import time
 import logging
 from typing import Optional, Dict, Any
 
-from mesofield.procedures import BaseProcedure, MesofieldProcedure, ProcedureConfig
+from mesofield.base import Procedure, ProcedureConfig
 from mesofield.config import ExperimentConfig
 
 
-class SimpleBehaviorProcedure(MesofieldProcedure):
+class SimpleBehaviorProcedure(Procedure):
     """
     Example procedure for a simple behavior experiment.
     
-    This procedure extends MesofieldProcedure to add custom behavior-specific logic
+    This procedure extends :class:`Procedure` to add custom behavior-specific logic
     while maintaining the standard camera and encoder recording workflow.
     """
     
@@ -73,11 +73,11 @@ class SimpleBehaviorProcedure(MesofieldProcedure):
         self.logger.info("Behavior trial completed")
 
 
-class MultiTrialProcedure(BaseProcedure):
+class MultiTrialProcedure(Procedure):
     """
     Example procedure that runs multiple trials with custom logic.
     
-    This demonstrates how to create a completely custom procedure from BaseProcedure
+    This demonstrates how to create a completely custom procedure from :class:`Procedure`
     with full control over the experimental workflow.
     """
     
@@ -151,7 +151,7 @@ class MultiTrialProcedure(BaseProcedure):
         self.logger.info(f"Trial {self.current_trial} completed in {duration:.1f}s")
 
 
-class OptoStimulationProcedure(MesofieldProcedure):
+class OptoStimulationProcedure(Procedure):
     """
     Example procedure for optogenetic stimulation experiments.
     
@@ -229,7 +229,7 @@ class OptoStimulationProcedure(MesofieldProcedure):
 
 
 # Factory function for easy procedure creation
-def create_custom_procedure(procedure_type: str, config: ExperimentConfig, **kwargs) -> BaseProcedure:
+def create_custom_procedure(procedure_type: str, config: ExperimentConfig, **kwargs) -> Procedure:
     """
     Factory function to create custom procedures by name.
     

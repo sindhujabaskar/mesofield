@@ -91,19 +91,15 @@ class EncoderSerialInterface(QThread):
             self.logger.warning("Cannot start recording: Serial interface is not running.")
 
     def stop_recording(self):
+        data = []
         if self._recording:
             self._recording = False
-            try:
-                with open(self._recording_file, 'w', newline='') as f:
-                    writer = csv.DictWriter(f, fieldnames=['timestamp', 'distance', 'speed'])
-                    writer.writeheader()
-                    for d in self._recorded_data:
-                        writer.writerow({'timestamp': d.timestamp, 'distance': d.distance, 'speed': d.speed})
-                self.logger.info(f"Recording stopped. Data saved to {self._recording_file}")
-            except Exception as e:
-                self.logger.error(f"Failed to save recorded data: {e}")
+            data = list(self._recorded_data)
+            self._recorded_data = []
+            self.logger.info("Recording stopped.")
         else:
-            self.logger.warning(f"Recording not active; nothing to stop.")
+            self.logger.warning("Recording not active; nothing to stop.")
+        return data
 
     def start(self):
         self.serialStreamStarted.emit()

@@ -4,7 +4,14 @@ import numpy as np
 from pymmcore_plus import CMMCorePlus
 from qtpy.QtCore import Qt, QTimer
 from qtpy.QtGui import QImage, QPixmap
-from qtpy.QtWidgets import QHBoxLayout, QLabel, QWidget, QSizePolicy
+from qtpy.QtWidgets import (
+    QHBoxLayout,
+    QVBoxLayout,
+    QProgressBar,
+    QLabel,
+    QWidget,
+    QSizePolicy,
+)
 from threading import Lock
 
 class ImagePreview(QWidget):
@@ -160,10 +167,16 @@ class ImagePreview(QWidget):
         self.image_label.setMinimumSize(512, 512)
         self.image_label.setScaledContents(False)  # Keep aspect ratio
 
-        # Set up layout
-        self.setLayout(QHBoxLayout())
+        # Set up layout with an image view and an optional progress bar
+        self.setLayout(QVBoxLayout())
         self.layout().setContentsMargins(0, 0, 0, 0)
         self.layout().addWidget(self.image_label)
+
+        # Progress bar shown during MDA acquisitions
+        self.progress_bar = QProgressBar()
+        #self.progress_bar.setRange(0, 100)
+        self.progress_bar.setVisible(False)
+        self.layout().addWidget(self.progress_bar)
         self.layout().setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Set up timer
@@ -182,6 +195,12 @@ class ImagePreview(QWidget):
 
         enev = self._mmcore.mda.events
         enev.frameReady.connect(self._on_frame_ready)
+        enev.sequenceStarted.connect(self._on_sequence_started)
+        enev.sequenceFinished.connect(self._on_sequence_finished)
+        enev.sequenceCanceled.connect(self._on_sequence_finished)
+
+        self._progress_total = 0
+        self._progress_count = 0
 
         self.destroyed.connect(self._disconnect)
 
@@ -198,6 +217,9 @@ class ImagePreview(QWidget):
         enev = self._mmcore.mda.events
         with suppress(TypeError):
             enev.frameReady.disconnect()
+            enev.sequenceStarted.disconnect()
+            enev.sequenceFinished.disconnect()
+            enev.sequenceCanceled.disconnect()
 
     def _on_streaming_start(self) -> None:
         if not self.streaming_timer.isActive():
@@ -232,9 +254,30 @@ class ImagePreview(QWidget):
         self._update_image(img)
 
     def _on_frame_ready(self, img: np.ndarray) -> None:
-        frame = img 
+        frame = img
         with self._frame_lock:
             self._current_frame = frame
+        if self.progress_bar.isVisible():
+            self._progress_count = min(self._progress_count + 1, self._progress_total)
+            self.progress_bar.setValue(self._progress_count)
+            # Update the text to "current/total"
+            self.progress_bar.setFormat(f"{self._progress_count}/{self._progress_total}")
+
+    def _on_sequence_started(self, sequence, metadata) -> None:
+        self._progress_total = len(list(sequence.iter_events()))
+        self._progress_count = 0
+        self.progress_bar.setRange(0, self._progress_total)
+        self.progress_bar.setValue(0)
+        # Show "0/total" initially
+        self.progress_bar.setFormat(f"{self._progress_count}/{self._progress_total}")
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setVisible(True)
+
+    def _on_sequence_finished(self, *_) -> None:
+        self.progress_bar.setValue(self._progress_total)
+        self.progress_bar.setFormat(f"{self._progress_total}/{self._progress_total}")
+        # Hide after a short delay
+        QTimer.singleShot(500, lambda: self.progress_bar.setVisible(False))
 
     def _display_image(self, img: np.ndarray) -> None:
         if img is None:

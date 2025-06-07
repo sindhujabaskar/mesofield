@@ -24,6 +24,8 @@ from PyQt6.QtWidgets import (
     QCheckBox
 )
 from PyQt6.QtGui import QIcon
+from qtpy.QtGui import QDesktopServices
+from qtpy.QtCore import QUrl
 
 from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
@@ -105,7 +107,11 @@ class ConfigController(QWidget):
         self.setFixedWidth(500)
 
         # ==================================== GUI Widgets ===================================== #
-
+        # Button to open the BIDS directory in the system file explorer (hidden until a directory is picked)
+        self.open_bids_button = QPushButton("Open BIDS Directory")
+        layout.addWidget(self.open_bids_button)
+        self.open_bids_button.setToolTip("Open the procedure.config.bids_dir in your file explorer")
+        
         # 1. Selecting a save directory
         self.directory_label = QLabel('Select Save Directory:')
         self.directory_line_edit = QLineEdit()
@@ -178,6 +184,7 @@ class ConfigController(QWidget):
         self.json_dropdown.currentIndexChanged.connect(self._update_config)
         self.record_button.clicked.connect(self.record)
         self.add_note_button.clicked.connect(self._add_note)
+        self.open_bids_button.clicked.connect(self._open_bids_directory)
 
         # Connect dynamic controls using constants defined in DynamicController
         dynamic_buttons = [
@@ -223,6 +230,14 @@ class ConfigController(QWidget):
         if directory:
             self.directory_line_edit.setText(directory)
             self._get_json_file_choices(directory)
+
+    def _open_bids_directory(self):
+        """Open the BIDS directory in the system file explorer."""
+        path = self.config.bids_dir
+        if not path or not os.path.isdir(path):
+            QMessageBox.warning(self, "Warning", "No BIDS directory selected or it does not exist.")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def _get_json_file_choices(self, path):
         """Return a list of JSON files in the current directory."""
