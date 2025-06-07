@@ -56,7 +56,7 @@ def cli():
 def launch(params, procedure_config, experiment_id, experimentor):
     from PyQt6.QtWidgets import QApplication
     from mesofield.gui.maingui import MainWindow
-    from mesofield.base import MesofieldProcedure, create_procedure
+    from mesofield.base import Procedure, create_procedure
     from mesofield.config import ExperimentConfig
 
     """Launch the mesofield acquisition interface."""
@@ -66,7 +66,7 @@ def launch(params, procedure_config, experiment_id, experimentor):
     # config.hardware._configure_engines(config)
     
     procedure = create_procedure(
-        MesofieldProcedure, 
+        Procedure,
         experiment_id=experiment_id,
         experimentor=experimentor,
         hardware_yaml=params,

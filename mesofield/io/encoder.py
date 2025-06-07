@@ -1,13 +1,13 @@
 import random
 import time
 import math
-from queue import Queue
 import serial
-from PyQt6.QtCore import pyqtSignal, QThread
 from typing import Dict, Any, Optional, ClassVar
+from datetime import datetime
 
-from mesofield.io import DataManager
+from PyQt6.QtCore import pyqtSignal, QThread
 
+from mesofield.utils._logger import get_logger
 # We're not importing DataAcquisitionDevice directly to avoid metaclass conflicts
 # SerialWorker will implement the protocol through duck typing instead
 
@@ -52,6 +52,8 @@ class SerialWorker(QThread):
     # Hardware device interface properties
     device_type: ClassVar[str] = "encoder"
     data_rate: float = 0.0  # Will be calculated from sample_interval_ms
+    _started: datetime  # Time when the device started recording
+    _stopped: datetime  # Time when the device stopped recording
     
     def __init__(self, 
                  serial_port: str, 
@@ -62,7 +64,11 @@ class SerialWorker(QThread):
                  development_mode: bool = True):
         
         super().__init__()
-
+        self.logger = get_logger(f"SerialWorker-{serial_port}")
+        self.logger.debug(f"Initializing SerialWorker with serial port: {serial_port}, "
+                         f"baud rate: {baud_rate}, sample interval: {sample_interval} ms, "
+                         f"wheel diameter: {wheel_diameter} mm, cpr: {cpr}, "
+                         f"development mode: {development_mode}")
         self.development_mode = development_mode
         self.device_id = f"encoder_{serial_port}" if not development_mode else "encoder_dev"
         
@@ -122,19 +128,21 @@ class SerialWorker(QThread):
     def stop(self):
         self.requestInterruption()
         self.wait()
+        self._stopped = datetime.now()
         self.serialStreamStopped.emit()
 
 
     def run(self):
         self.init_data()
         self.start_time = time.time()
+        self._started = datetime.now()
         try:
             if self.development_mode:
                 self.run_development_mode()
             else:
                 self.run_serial_mode()
         finally:
-            print("Encoder Stream stopped.")
+            self.logger.info("Encoder Stream stopped.")
             
             
     def run_development_mode(self):
@@ -245,8 +253,10 @@ class SerialWorker(QThread):
             'Speed': speeds
         }
         encoder_df = DataFrame(data)
+        # Add start/stop timestamps to every row
+        encoder_df['Started'] = self._started
+        encoder_df['Stopped'] = self._stopped
         return encoder_df
-    
     
     def clear_data(self):
         self.stored_data = []

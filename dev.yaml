@@ -16,7 +16,7 @@ encoder:
   cpr: 2400
   diameter_mm: 80
   sample_interval_ms: 20
-  development_mode: False
+  development_mode: True
 
 cameras:
   - id: "dev"
@@ -24,6 +24,9 @@ cameras:
     backend: "micromanager"
     micromanager_path: "C:/Program Files/Micro-Manager-2.0"
     viewer_type: "static"
+    properties:
+      fps: 30
+      Exposure: 30
 
 
   # - id: "dev"

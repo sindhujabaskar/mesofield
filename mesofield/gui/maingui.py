@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
         self.acquisition_gui = MDA(self.config)
         self.config_controller = ConfigController(self.config, self.procedure)
         self.encoder_widget = EncoderWidget(self.config)
-        self.initialize_console(self.config) # Initialize the IPython console
+        self.initialize_console(self.procedure) # Initialize the IPython console
         #--------------------------------------------------------------------#
 
         #============================== Layout ==============================#
@@ -79,7 +79,7 @@ class MainWindow(QMainWindow):
                 self.console_widget.show()
 
                 
-    def initialize_console(self, cfg):
+    def initialize_console(self, procedure):
         """Initialize the IPython console and embed it into the application."""
         import mesofield.data as data
         # Create an in-process kernel
@@ -99,7 +99,7 @@ class MainWindow(QMainWindow):
         console_namespace = {
             #'mda': self.acquisition_gui.mda,
             'self': self,
-            'config': cfg,
+            'procedure': procedure,
             'data': data
             # Optional, so you can use 'self' directly in the console
         }

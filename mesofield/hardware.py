@@ -5,18 +5,20 @@ from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Type, ClassVar, TypeVar, Callable
 import yaml
 import threading 
+from datetime import datetime
 
 import nidaqmx.system
 import nidaqmx
 from nidaqmx.constants import Edge
 from pymmcore_plus import CMMCorePlus, DeviceType
+from pymmcore_plus.core._device import CameraDevice 
 
 from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.arducam import VideoThread
 from mesofield.io.encoder import SerialWorker
 from mesofield.io.treadmill import EncoderSerialInterface
 from mesofield.protocols import HardwareDevice, DataProducer
-from mesofield._logger import get_logger, log_this_fr
+from mesofield.utils._logger import get_logger, log_this_fr
 
 T = TypeVar("T")
 
@@ -277,6 +279,9 @@ class Nidaq:
     config: Dict[str, Any] = None
 
     def __post_init__(self):
+        self._started: datetime # Timestamp when the device was started
+        self._stopped: datetime # Timestamp when the device was stopped
+
         if self.config is None:
             self.config = {
                 "device_name": self.device_name,
@@ -318,7 +323,7 @@ class Nidaq:
             f"{self.device_name}/{self.ctr}", edge=Edge.RISING, initial_count=0
         )
         self._ci.start()
-
+        self._started = datetime.now()
         # Configure the DO task (camera trigger)
         self._do = nidaqmx.Task()
         self._do.do_channels.add_do_chan(f"{self.device_name}/{self.lines}")
@@ -359,6 +364,7 @@ class Nidaq:
         self._stop_event.set()
         if self._thread:
             self._thread.join()
+        self._stopped = datetime.now()
     
     def shutdown(self) -> None:
         """Close the device."""
@@ -384,18 +390,20 @@ class Nidaq:
         """Get a parameter from the device."""
         return self.config.get(parameter)
 
-from pymmcore_plus.core._device import CameraDevice 
 
 @DeviceRegistry.register("camera")
 class MMCamera(DataProducer, HardwareDevice):
     
     device_type = "camera"
-
+    sampling_rate: float = 30.0  # Default sampling rate in Hz
+    
     def __init__(self, cfg: dict):
         self.camera_device: Optional[CameraDevice | VideoThread] = None
         self.core: Optional[CMMCorePlus | VideoThread] = None
         self.id = cfg["id"]
         self.name = cfg["name"]
+        self._started: float # Timestamp when the device was started
+        self._stopped: float # Timestamp when the device was stopped
         self.backend = cfg.get("backend", "").lower()
         self.properties = cfg.get("properties", {})
         self.viewer = cfg.get("viewer_type", "static")
@@ -465,7 +473,8 @@ class MMCamera(DataProducer, HardwareDevice):
     
     def shutdown(self):
         if self.backend == "micromanager" and hasattr(self.core, "reset"):
-            self.core.reset()
+            self.core.mda.cancel()
+            #self.core.reset()
     
     def __getattr__(self, name: str):
         """
