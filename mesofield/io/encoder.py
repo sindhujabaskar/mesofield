@@ -118,6 +118,7 @@ class SerialWorker(QThread):
         self.start_time = None
 
     def start_recording(self, file_path: Optional[str] = None) -> None:
+        self.output_path = file_path
         self.serialStreamStarted.emit()
         self.start()
 

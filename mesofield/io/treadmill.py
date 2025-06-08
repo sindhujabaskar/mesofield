@@ -85,6 +85,7 @@ class EncoderSerialInterface(QThread):
             self.ser.reset_input_buffer()
             self._recording = True
             self._recording_file = file_path
+            self.output_path = file_path
             self._recorded_data = []
             self.logger.info(f"Recording started. Data will be stored to {file_path}")
         else:
