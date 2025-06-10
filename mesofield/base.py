@@ -87,13 +87,24 @@ class Procedure:
     @property
     def hardware(self) -> HardwareManager:
         return self._config.hardware
-
+    
     # ------------------------------------------------------------------
     # Core business logic
     def initialize_hardware(self) -> None:
-        """Set up all hardware and prepare data managers."""
+        """Boot up hardware and a `DataManager`.
+        
+        The core logic here is to have a `Procedure` with instance attributes of: 
+            | `ExperimentConfig` | `HardwareManager` | `DataManager` |
+
+        Hardware is ininitialized via the `ExperimentConfig.HardwareManager` instance.
+        This is partially leftover from a legacy design, but remains convenient to pass an `ExperimentConfig`
+        object in order to provide stateful access to the hardware configuration and management without 
+        passing the entire `Procedure` instance itself.
+        
+        The `DataManager` singleton is initialized here, too, as an attribute of the `Procedure` instance. 
+        """
         try:
-            self._config.hardware.initialize_all()
+            self._config.hardware._initialize_devices()
             self._config.hardware._configure_engines(self._config)
             self.data_manager = DataManager()
             self.data_manager.set_config(self._config)
@@ -130,7 +141,8 @@ class Procedure:
                     cam.output_path = writer._filename
                     cam.metadata_path = writer._frame_metadata_filename
                 recorders.append((cam.core, self._config.build_sequence(cam), writer))
-            self.hardware.cameras[0].core.mda.events.sequenceFinished.connect(self._cleanup_procedure)
+                
+            self.hardware.cameras[1].core.mda.events.sequenceFinished.connect(self._cleanup_procedure)
 
             if self._config.get("start_on_trigger", False):
                 self.psychopy_process = self._launch_psychopy()
@@ -166,14 +178,6 @@ class Procedure:
         self.logger.info("Data saved successfully")
 
     # ------------------------------------------------------------------
-    def cleanup(self) -> None:
-        try:
-            self._config.hardware.close_all()
-            self.logger.info("Cleanup completed successfully")
-        except Exception as e:  # pragma: no cover - cleanup failures
-            self.logger.error(f"Error during cleanup: {e}")
-
-    # ------------------------------------------------------------------
     def _launch_psychopy(self):
         from mesofield.subprocesses.psychopy import PsychoPyProcess
         return PsychoPyProcess(self._config)
@@ -193,7 +197,6 @@ class Procedure:
             self.save_data()
             if hasattr(self, "data_manager"):
                 self.data_manager.update_database()
-            self.cleanup()
         except Exception as e:  # pragma: no cover - cleanup failure
             self.logger.error(f"Error during cleanup: {e}")
 

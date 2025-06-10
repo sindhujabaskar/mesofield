@@ -134,7 +134,6 @@ class ExperimentConfig(ConfigRegister):
         # Initialize hardware
         try:
             self.hardware = HardwareManager(path)
-            self.logger.info(f"Hardware initialized with {len(self.hardware.devices)} devices")
         except Exception as e:
             self.logger.error(f"Failed to initialize hardware: {e}")
             raise

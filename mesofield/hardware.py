@@ -48,7 +48,6 @@ class HardwareManager():
     """
 
     def __init__(self, config_file: str):
-        # Initialize logging first
         self.logger = get_logger(f'{__name__}.{self.__class__.__name__}')
         self.logger.info(f"Initializing HardwareManager with config: {config_file}")
 
@@ -67,9 +66,6 @@ class HardwareManager():
         self.cameras: tuple[MMCamera, ...] = ()
         self._viewer = self.yaml.get('viewer_type', 'static')
 
-        # Initialize all devices
-        self._initialize_devices()
-        self.logger.info(f"Hardware initialization complete. {len(self.devices)} devices initialized")
 
     def __repr__(self):
         return (
@@ -132,6 +128,7 @@ class HardwareManager():
 
     def _initialize_devices(self):
         """Initialize hardware devices from YAML configuration."""
+        self.logger.info("Initializing hardware devices from YAML configuration...")
         self._initialize_cameras()
         self._initialize_encoder()
         self._initialize_daq()
