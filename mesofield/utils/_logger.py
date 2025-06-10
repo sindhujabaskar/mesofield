@@ -16,7 +16,10 @@ from logging.handlers import TimedRotatingFileHandler
 # Simple global configuration
 _configured = False
 _log_dir = None
-
+# make everything from these modules WARNING+ only
+for lib in ("matplotlib", "asyncio", "traitlets"):
+    logging.getLogger(lib).setLevel(logging.WARNING)
+    
 # ANSI colorful codes bc its pretty
 _LEVEL_COLORS = {
     'DEBUG':    '\033[94m',  # bright blue
