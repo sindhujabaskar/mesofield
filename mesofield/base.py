@@ -55,6 +55,7 @@ class Procedure:
         self.experimentor = procedure_config.experimentor
         self.hardware_yaml = procedure_config.hardware_yaml
         self.data_dir = procedure_config.data_dir
+        self.h5_path = os.path.join(self.data_dir, f"{self.experiment_id}.h5")
 
         # Initialize configuration and apply custom parameters
         self._config = ExperimentConfig(self.hardware_yaml)
@@ -64,6 +65,7 @@ class Procedure:
         self._config.set("experiment_id", self.experiment_id)
         self._config.set("experimentor", self.experimentor)
         self._config.set("data_dir", self.data_dir)
+        self._config.set("h5_path", self.h5_path)
 
         if procedure_config.json_config:
             self.setup_configuration(procedure_config.json_config)
@@ -85,16 +87,28 @@ class Procedure:
     @property
     def hardware(self) -> HardwareManager:
         return self._config.hardware
-
+    
     # ------------------------------------------------------------------
     # Core business logic
     def initialize_hardware(self) -> None:
-        """Set up all hardware and prepare data managers."""
+        """Boot up hardware and a `DataManager`.
+        
+        The core logic here is to have a `Procedure` with instance attributes of: 
+            | `ExperimentConfig` | `HardwareManager` | `DataManager` |
+
+        Hardware is ininitialized via the `ExperimentConfig.HardwareManager` instance.
+        This is partially leftover from a legacy design, but remains convenient to pass an `ExperimentConfig`
+        object in order to provide stateful access to the hardware configuration and management without 
+        passing the entire `Procedure` instance itself.
+        
+        The `DataManager` singleton is initialized here, too, as an attribute of the `Procedure` instance. 
+        """
         try:
-            self._config.hardware.initialize_all()
+            self._config.hardware._initialize_devices()
             self._config.hardware._configure_engines(self._config)
             self.data_manager = DataManager()
             self.data_manager.set_config(self._config)
+            self.data_manager.set_database(self.h5_path)
             for device in self._config.hardware.devices.values():
                 if hasattr(device, "device_type") and hasattr(device, "get_data"):
                     self.data_manager.register_hardware_device(device)
@@ -115,15 +129,20 @@ class Procedure:
         """Run the standard Mesofield workflow."""
         self.logger.info("Starting experiment")
         try:
-            recorders = [
-                (
-                    cam.core,
-                    self._config.build_sequence(cam),
-                    CustomWriter(self._config.make_path(cam.name, "ome.tiff", bids_type="func")),
+            recorders = []
+            for cam in self.hardware.cameras:
+                writer = (
+                    self.data_manager.saver.writer_for(cam)
+                    if self.data_manager.saver
+                    else CustomWriter(self._config.make_path(cam.name, "ome.tiff", bids_type="func"))
                 )
-                for cam in self.hardware.cameras
-            ]
-            self.hardware.cameras[0].core.mda.events.sequenceFinished.connect(self._cleanup_procedure)
+                if not hasattr(cam, "output_path"):
+                    # ensure path attributes even when writer created directly
+                    cam.output_path = writer._filename
+                    cam.metadata_path = writer._frame_metadata_filename
+                recorders.append((cam.core, self._config.build_sequence(cam), writer))
+                
+            self.hardware.cameras[1].core.mda.events.sequenceFinished.connect(self._cleanup_procedure)
 
             if self._config.get("start_on_trigger", False):
                 self.psychopy_process = self._launch_psychopy()
@@ -159,14 +178,6 @@ class Procedure:
         self.logger.info("Data saved successfully")
 
     # ------------------------------------------------------------------
-    def cleanup(self) -> None:
-        try:
-            self._config.hardware.close_all()
-            self.logger.info("Cleanup completed successfully")
-        except Exception as e:  # pragma: no cover - cleanup failures
-            self.logger.error(f"Error during cleanup: {e}")
-
-    # ------------------------------------------------------------------
     def _launch_psychopy(self):
         from mesofield.subprocesses.psychopy import PsychoPyProcess
         return PsychoPyProcess(self._config)
@@ -184,7 +195,8 @@ class Procedure:
             self.stop_encoder()
             self.stopped_time = datetime.now()
             self.save_data()
-            self.cleanup()
+            if hasattr(self, "data_manager"):
+                self.data_manager.update_database()
         except Exception as e:  # pragma: no cover - cleanup failure
             self.logger.error(f"Error during cleanup: {e}")
 
@@ -213,7 +225,9 @@ class Procedure:
         try:
             encoder = self.hardware.get_encoder()
             if encoder and hasattr(encoder, "start_recording"):
-                encoder.start_recording(self._config.make_path(encoder.device_id, "csv", "beh"))
+                path = self._config.make_path(encoder.device_id, "csv", "beh")
+                encoder.output_path = path
+                encoder.start_recording(path)
                 return True
             return False
         except Exception as e:
@@ -235,6 +249,14 @@ class Procedure:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._config.notes.append(f"{timestamp}: {note}")
         self.logger.info(f"Added note: {note}")
+
+
+
+    def load_database(self, key: str = "data"):
+        """Return a DataFrame with all sessions stored for this Procedure."""
+        if hasattr(self, "data_manager"):
+            return self.data_manager.read_database(key)
+        return None
 
 
 

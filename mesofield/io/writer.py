@@ -91,7 +91,7 @@ class CustomWriter(_5DWriterBase[np.memmap]):
     ) -> None:
         """Write a frame to the file."""
         ary[index] = frame
-        print(f"Writing frame {index}")
+        # print(f"Writing frame {index}")
 
     def new_array(
         self, position_key: str, dtype: np.dtype, sizes: dict[str, int]

@@ -174,7 +174,7 @@ class ImagePreview(QWidget):
 
         # Progress bar shown during MDA acquisitions
         self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
+        #self.progress_bar.setRange(0, 100)
         self.progress_bar.setVisible(False)
         self.layout().addWidget(self.progress_bar)
         self.layout().setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -260,16 +260,23 @@ class ImagePreview(QWidget):
         if self.progress_bar.isVisible():
             self._progress_count = min(self._progress_count + 1, self._progress_total)
             self.progress_bar.setValue(self._progress_count)
+            # Update the text to "current/total"
+            self.progress_bar.setFormat(f"{self._progress_count}/{self._progress_total}")
 
     def _on_sequence_started(self, sequence, metadata) -> None:
         self._progress_total = len(list(sequence.iter_events()))
         self._progress_count = 0
         self.progress_bar.setRange(0, self._progress_total)
         self.progress_bar.setValue(0)
+        # Show "0/total" initially
+        self.progress_bar.setFormat(f"{self._progress_count}/{self._progress_total}")
+        self.progress_bar.setTextVisible(True)
         self.progress_bar.setVisible(True)
 
     def _on_sequence_finished(self, *_) -> None:
         self.progress_bar.setValue(self._progress_total)
+        self.progress_bar.setFormat(f"{self._progress_total}/{self._progress_total}")
+        # Hide after a short delay
         QTimer.singleShot(500, lambda: self.progress_bar.setVisible(False))
 
     def _display_image(self, img: np.ndarray) -> None:

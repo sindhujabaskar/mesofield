@@ -50,6 +50,7 @@ class SerialWorker(QThread):
     # ======================================================== #
     
     # Hardware device interface properties
+    device_id: str  # Unique identifier for this device
     device_type: ClassVar[str] = "encoder"
     data_rate: float = 0.0  # Will be calculated from sample_interval_ms
     _started: datetime  # Time when the device started recording
@@ -118,6 +119,7 @@ class SerialWorker(QThread):
         self.start_time = None
 
     def start_recording(self, file_path: Optional[str] = None) -> None:
+        self.output_path = file_path
         self.serialStreamStarted.emit()
         self.start()
 

@@ -59,8 +59,18 @@ def launch(params, procedure_config, experiment_id, experimentor):
     from mesofield.base import Procedure, create_procedure
     from mesofield.config import ExperimentConfig
 
+# Font: Sub-Zero; character width: Full, Character Height: Fitted
+# https://patorjk.com/software/taag/#p=display&h=0&v=1&f=Sub-Zero&t=Mesofield
     """Launch the mesofield acquisition interface."""
-    print('Launching mesofield acquisition interface...')
+    print(r"""
+ __    __     ______     ______     ______     ______   __     ______     __         _____    
+/\ "-./  \   /\  ___\   /\  ___\   /\  __ \   /\  ___\ /\ \   /\  ___\   /\ \       /\  __-.  
+\ \ \-./\ \  \ \  __\   \ \___  \  \ \ \/\ \  \ \  __\ \ \ \  \ \  __\   \ \ \____  \ \ \/\ \ 
+ \ \_\ \ \_\  \ \_____\  \/\_____\  \ \_____\  \ \_\    \ \_\  \ \_____\  \ \_____\  \ \____- 
+  \/_/  \/_/   \/_____/   \/_____/   \/_____/   \/_/     \/_/   \/_____/   \/_____/   \/____/ 
+                                                                                  
+-------------------------  Mesofield Acquisition Interface  ---------------------------------
+""")
     app = QApplication([])
     # config = ExperimentConfig(params)
     # config.hardware._configure_engines(config)

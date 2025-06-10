@@ -57,10 +57,11 @@ class EncoderSerialInterface(QThread):
     serialStreamStarted = pyqtSignal()         # Emits when streaming starts
     serialStreamStopped = pyqtSignal()         # Emits when streaming stops
     serialSpeedUpdated = pyqtSignal(float, float)  # Emits elapsed time and current speed
-
+    device_id: str = "EncoderInterfaceT4"  # Default device ID, can be overridden
     def __init__(self, port: str, baudrate: int = 192000, data_callback=None):
         super().__init__()
         self.logger = logging.getLogger("EncoderSerialInterface")
+        #self.device_id: str
         self.serial_port = port
         self.baud_rate = baudrate
         self.data_callback = data_callback
@@ -85,6 +86,7 @@ class EncoderSerialInterface(QThread):
             self.ser.reset_input_buffer()
             self._recording = True
             self._recording_file = file_path
+            self.output_path = file_path
             self._recorded_data = []
             self.logger.info(f"Recording started. Data will be stored to {file_path}")
         else:
