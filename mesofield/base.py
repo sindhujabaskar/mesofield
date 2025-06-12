@@ -199,6 +199,7 @@ class Procedure:
             self.stop_cameras()
             self.stop_encoder()
             self.stopped_time = datetime.now()
+            self.config.hardware.nidaq.reset()
             self.save_data()
             if hasattr(self, "data_manager"):
                 self.data_manager.update_database()
