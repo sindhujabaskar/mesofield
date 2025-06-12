@@ -193,6 +193,7 @@ class Procedure:
     def _cleanup_procedure(self):
         self.logger.info("Cleanup Procedure")
         try:
+            self.hardware.cameras[0].core.mda.events.sequenceFinished.disconnect(self._cleanup_procedure)
             if hasattr(self, "psychopy_process"):
                 del self.psychopy_process
             self.stop_cameras()
