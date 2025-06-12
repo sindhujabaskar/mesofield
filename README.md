@@ -36,6 +36,11 @@ The `DataManager` provides a centralized system for:
 - Managing data streams from multiple devices
 - Real-time data processing
 - Buffering and accessing data
+- A `DataQueue` connects hardware streams to the manager for thread-safe aggregation
+  - The queue can be logged with `DataManager.start_queue_logger()`
+    which writes a single CSV containing `datetime`, `timestamp`,
+    `device_ts`, `device_id`, and `payload`. The logger can either stream
+    packets directly to disk or buffer them in memory until stopped.
 
 The GUI components include live views for cameras (with optional pyqtgraph ImageView), encoder velocity plots, buttons for hardware control, and an iPython terminal for access to the backend.
 

@@ -86,3 +86,20 @@ def config_dataframe(cfg) -> pd.DataFrame:
     )
     cfg_df.index = idx
     return cfg_df
+
+
+def queue_dataframe(queue_path: Any, subject: str, session: str) -> pd.DataFrame:
+    """Return a DataFrame of queued data if the CSV exists."""
+    if not queue_path or not os.path.exists(queue_path):
+        return pd.DataFrame()
+
+    df = pd.read_csv(queue_path)
+    if df.empty:
+        return pd.DataFrame()
+
+    idx = pd.MultiIndex.from_arrays(
+        [[subject] * len(df), [session] * len(df)],
+        names=["Subject", "Session"],
+    )
+    df.index = idx
+    return df
