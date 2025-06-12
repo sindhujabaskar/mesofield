@@ -258,6 +258,18 @@ class HardwareManager():
         """Check if the encoder device exists."""
         return hasattr(self, 'encoder') and self.encoder is not None
 
+class Event:
+    """Simple event handler."""
+    def __init__(self):
+        self._callbacks = []
+    def connect(self, callback):
+        self._callbacks.append(callback)
+    def emit(self, data):
+        for cb in self._callbacks:
+            try:
+                cb(data)
+            except Exception:
+                pass
 
 @dataclass
 class Nidaq:
@@ -278,7 +290,7 @@ class Nidaq:
     def __post_init__(self):
         self._started: datetime # Timestamp when the device was started
         self._stopped: datetime # Timestamp when the device was stopped
-
+        self.data_event = Event() 
         if self.config is None:
             self.config = {
                 "device_name": self.device_name,
@@ -333,21 +345,24 @@ class Nidaq:
     def _worker(self):
         prev_count = 0
         while not self._stop_event.is_set():
-            # 1) Trigger camera
+            # 1) Start Read count & timestamp
+            cnt = self._ci.read()
+            ts = time.time()
+
+            # 2) Trigger camera
             self._do.write(True)
             time.sleep(self.pulse_width)
             self._do.write(False)
 
-            # 2) Read count & timestamp
-            cnt = self._ci.read()
-            ts = time.time()
-
-            # 3) For each new edge, record the same timestamp
-            if cnt > prev_count:
+            # 3) For each new edge, record the timestamp
+            new_count = int(cnt)
+            if new_count > prev_count:
+                event_data = [ts] * (new_count - prev_count)
                 with self._lock:
-                    self._exposure_times.extend([ts] * (cnt - prev_count))
-                prev_count = cnt
-
+                    self._exposure_times.extend(event_data)
+                self.data_event.emit(event_data)
+                prev_count = new_count
+            
             # 4) Wait before next trigger
             time.sleep(self.poll_interval)
 
@@ -367,7 +382,7 @@ class Nidaq:
         """Close the device."""
         self.stop()
     
-    def get_exposure_times(self) -> list[float]:
+    def get_data(self) -> list[float]:
         """Retrieve a copy of the host-time exposure timestamps."""
         with self._lock:
             return list(self._exposure_times)
