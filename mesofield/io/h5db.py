@@ -29,7 +29,7 @@ class H5Database:
 
             store.put(key, combined, format=fmt)
 
-    def read(self, key: str = "data") -> Optional[pd.DataFrame]:
+    def read(self, key: str = "data") -> Optional[pd.DataFrame | pd.Series]:
         """Read a DataFrame from the store if present."""
         if not self.path.exists():
             return None

@@ -8,7 +8,7 @@ import pandas as pd
 import tifffile
 
 
-def camera_dataframe(cameras: List[Any], subject: str, session: str, *, parse_metadata: bool = True) -> pd.DataFrame:
+def camera_dataframe_tiffs(cameras: List[Any], subject: str, session: str, *, parse_metadata: bool = True) -> pd.DataFrame:
     """Return a DataFrame describing camera outputs."""
     records = {}
     for cam in cameras:
@@ -30,6 +30,39 @@ def camera_dataframe(cameras: List[Any], subject: str, session: str, *, parse_me
         return pd.DataFrame()
     idx = pd.MultiIndex.from_arrays([[subject], [session]], names=["Subject", "Session"])
     return pd.DataFrame(records, index=idx)
+
+
+def camera_dataframe(
+    cameras: List[Any],
+    subject: str,
+    session: str,
+    *,
+    include_metadata: bool = True
+) -> pd.DataFrame:
+    """
+    Return a DataFrame of camera file-paths (TIFF and optional metadata).
+    Index is a MultiIndex: (Subject, Session), with columns tiff_path and meta_path.
+    """
+    rows: list[dict[str, str | None]] = []
+    for cam in cameras:
+        tiff_path = getattr(cam, "output_path", None)
+        meta_path = getattr(cam, "metadata_path", None)
+        if include_metadata and not meta_path and tiff_path:
+            if tiff_path.endswith(".ome.tiff"):
+                meta_path = tiff_path.replace(".ome.tiff", ".ome.tiff_frame_metadata.json")
+            elif tiff_path.endswith(".ome.tif"):
+                meta_path = tiff_path.replace(".ome.tif", ".ome.tif_frame_metadata.json")
+        rows.append({"tiff_path": tiff_path, "meta_path": meta_path})
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+    df.index = pd.MultiIndex.from_arrays(
+        [[subject] * len(df), [session] * len(df)],
+        names=["Subject", "Session"]
+    )
+    return df
 
 
 def encoder_dataframe(encoder: Any, subject: str, session: str) -> pd.DataFrame:
