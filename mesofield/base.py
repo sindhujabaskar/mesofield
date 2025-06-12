@@ -178,6 +178,7 @@ class Procedure:
                 stopped = getattr(device, "_stopped", "")
                 writer.writerow([device_id, started, stopped])
         self.data_manager.stop_queue_logger()
+        self.config.save_wheel_encoder_data(self.config.hardware.encoder.get_data())
         self.logger.info("Data saved successfully")
 
     # ------------------------------------------------------------------
