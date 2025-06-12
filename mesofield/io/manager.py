@@ -34,10 +34,14 @@ DataManager & DataSaver Workflow Overview
 • Each block is wrapped in try/except to log errors and continue remaining steps.
 """
 
-from dataclasses import dataclass
-from typing import Optional, List, Any
+from dataclasses import dataclass, field
+from typing import Optional, List, Any, Dict
 
 import os
+import queue
+import csv
+import threading
+import time
 
 import pandas as pd
 
@@ -45,6 +49,45 @@ from mesofield.config import ExperimentConfig
 from mesofield.io.writer import CustomWriter
 from mesofield.io.h5db import H5Database
 from mesofield.io import sessiondb
+
+
+@dataclass
+class DataPacket:
+    """Entry in :class:`DataQueue`."""
+
+    device_id: str
+    timestamp: float
+    payload: Any
+    device_ts: float | None = None
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+class DataQueue:
+    """Thread-safe queue for data streaming between devices and consumers."""
+
+    def __init__(self, maxsize: int = 0) -> None:
+        self._queue: queue.Queue[DataPacket] = queue.Queue(maxsize)
+
+    def push(
+        self,
+        device_id: str,
+        payload: Any,
+        *,
+        timestamp: float | None = None,
+        device_ts: float | None = None,
+        **meta: Any,
+    ) -> None:
+        """Add a new data packet to the queue."""
+        if timestamp is None:
+            timestamp = time.time()
+        self._queue.put(DataPacket(device_id, timestamp, payload, device_ts, meta))
+
+    def pop(self, block: bool = True, timeout: float | None = None) -> DataPacket:
+        """Return the next :class:`DataPacket` from the queue."""
+        return self._queue.get(block=block, timeout=timeout)
+
+    def empty(self) -> bool:
+        return self._queue.empty()
 
 
 @dataclass
@@ -89,7 +132,20 @@ class DataManager:
     def __init__(self) -> None:
         self.saver: Optional[DataSaver] = None
         self.database: Optional[H5Database] = None
+        self.data_queue = DataQueue()
+        
         self.devices: List[Any] = []
+        self.device_map: Dict[str, Any] = {}
+        
+        self.queue_log_path: Optional[str] = None
+        self.queue_packets: list[list[Any]] = []
+        
+        self._queue_thread: Optional[threading.Thread] = None
+        self._stop_queue: bool = False
+        self._stream: bool = False
+        self._writer: Optional[csv.writer] = None
+        self._file: Optional[Any] = None
+
 
     def set_config(self, config: ExperimentConfig) -> None:
         """Attach configuration so data can be saved."""
@@ -110,9 +166,124 @@ class DataManager:
             return self.database.read(key)
         return None
 
+    # ------------------------------------------------------------------
+    def start_queue_logger(self, path: str | None = None, *, stream: bool = True) -> None:
+        """Begin capturing :class:`DataQueue` contents."""
+        if path is None and self.saver:
+            path = self.saver.config.make_path("dataqueue", "csv", "beh")
+        if path is None:
+            return
+
+        self.queue_log_path = path
+        self.queue_packets = []
+        self._stream = stream
+        self._stop_queue = False
+
+        if self._stream:
+            self._file = open(path, "w", newline="")
+            self._writer = csv.writer(self._file)
+            self._writer.writerow([
+                "datetime",
+                "timestamp",
+                "device_ts",
+                "device_id",
+                "payload",
+            ])
+        else:
+            self._file = None
+            self._writer = None
+
+        self._queue_thread = threading.Thread(target=self._queue_writer_loop, daemon=True)
+        self._queue_thread.start()
+
+    def stop_queue_logger(self) -> None:
+        """Stop the queue logging thread and flush data to disk."""
+        self._stop_queue = True
+        if self._queue_thread:
+            self._queue_thread.join(timeout=1)
+
+        if not self._stream and self.queue_log_path:
+            with open(self.queue_log_path, "w", newline="") as fh:
+                writer = csv.writer(fh)
+                writer.writerow([
+                    "datetime",
+                    "timestamp",
+                    "device_ts",
+                    "device_id",
+                    "payload",
+                ])
+                writer.writerows(self.queue_packets)
+
+        if self._file:
+            try:
+                self._file.close()
+            except Exception:
+                pass
+        self._file = None
+        self._writer = None
+
+    def _queue_writer_loop(self) -> None:
+        from datetime import datetime
+
+        while not self._stop_queue or not self.data_queue.empty():
+            try:
+                pkt = self.data_queue.pop(timeout=0.1)
+            except queue.Empty:
+                continue
+
+            now = datetime.now().isoformat()
+            row = [now, pkt.timestamp, pkt.device_ts, pkt.device_id, pkt.payload]
+            self.queue_packets.append(row)
+
+            if self._stream and self._writer:
+                self._writer.writerow(row)
+                assert self._file is not None
+                self._file.flush()
+
     def register_hardware_device(self, device: Any) -> None:  # pragma: no cover - convenience
-        """Track a hardware device (no streaming management)."""
+        """Track a hardware device and connect its data stream to the queue."""
         self.devices.append(device)
+
+        # Try to connect various callback styles to push data to our queue
+        def _push(payload: Any, device_ts: Any = None, *, dev=device) -> None:
+            dev_id = getattr(dev, "device_id", getattr(dev, "id", "unknown"))
+            self.data_queue.push(dev_id, payload, device_ts=device_ts)
+
+        # Connect using a standard data_event if present
+        evt = getattr(device, "data_event", None)
+        if evt is not None and hasattr(evt, "connect"):
+            try:
+                evt.connect(_push)
+            except Exception:
+                pass
+
+        if hasattr(device, "data_callback"):
+            try:
+                device.data_callback = _push  # type: ignore[assignment]
+            except Exception:
+                pass
+        if hasattr(device, "set_data_callback"):
+            try:
+                device.set_data_callback(_push)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            
+        sig = getattr(device, "serialDataReceived", None)
+        if sig is not None and hasattr(sig, "connect"):
+            try:
+                sig.connect(_push)
+            except Exception:
+                pass
+
+        if sig is None and hasattr(device, "core"):
+            # connect metadata-only from core.mda.events.frameReady
+            sig = getattr(device.core.mda.events, "frameReady", None)
+            if sig is not None and hasattr(sig, "connect"):
+                try:
+                    # frameReady callback signature: (image, metadata)
+                    sig.connect(lambda _img, event, metadata: _push(metadata['camera_metadata']['TimeReceivedByCore']))
+                except Exception:
+                    pass
 
     def get_device_outputs(self, subject: str, session: str) -> pd.DataFrame:
         """Return a DataFrame of output file paths for registered devices."""
@@ -183,6 +354,14 @@ class DataManager:
                 self.append_to_database(ts_df, key="timestamps")
         except Exception as e:  # pragma: no cover - optional
             cfg.logger.error(f"Database update failed while storing timestamps: {e}")
+
+        try:
+            if self.queue_log_path:
+                q_df = sessiondb.queue_dataframe(self.queue_log_path, subject, session)
+                if not q_df.empty:
+                    self.append_to_database(q_df, key="queue_stream")
+        except Exception as e:  # pragma: no cover - optional
+            cfg.logger.error(f"Database update failed while storing queue data: {e}")
 
         try:
             cfg_df = sessiondb.config_dataframe(cfg)

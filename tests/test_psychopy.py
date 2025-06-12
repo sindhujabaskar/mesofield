@@ -1,4 +1,6 @@
 import sys
+import pytest
+pytest.skip("Skipping GUI dependent tests", allow_module_level=True)
 from PyQt6.QtWidgets import (
     QWidget,
     QLineEdit,

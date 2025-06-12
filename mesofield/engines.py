@@ -113,14 +113,6 @@ class MesoEngine(MDAEngine):
         # Stop the Arduino LED Sequence
         self._mmc.getPropertyObject('Arduino-Switch', 'State').stopSequence()
         # Stop the SerialWorker collecting encoder data and save
-        data = self._encoder.stop_recording()
-        dm = DataManager()
-        if getattr(dm, "saver", None):
-            if data:
-                dm.saver.save_encoder_data(data)
-            dm.saver.save_config()
-        else:
-            self._config.save_configuration()
         pass
     
 
@@ -136,16 +128,17 @@ class PupilEngine(MDAEngine):
     def set_config(self, cfg: 'ExperimentConfig') -> None:
         self._config = cfg
         #self._encoder = cfg.hardware.encoder
-        self._nidaq = cfg.hardware.nidaq
-        self._mmc1: CMMCorePlus = cfg._cores[0]
+        self.nidaq = cfg.hardware.nidaq
+        if len(self._config._cores) > 1: 
+            self._mmc1: CMMCorePlus = cfg._cores[0]
+        else:
+            self._mmc1 = None
 
     def setup_sequence(self, sequence: useq.MDASequence) -> SummaryMetaV1 | None:
-        self.nidaq = sequence.metadata.get("device_name")
-        self.lines = sequence.metadata.get("lines")
-        self.io_type = sequence.metadata.get("io_type")
-        if self._nidaq is not None:
-            self._nidaq.reset()
-        logging.info(f'{self.__str__()} setup_sequence loaded Nidaq: {self.nidaq} with lines {self.lines} of type: {self.io_type}')
+        self.nidaq = sequence.metadata.get("nidaq")
+        if self.nidaq is not None:
+            self.nidaq.reset()
+        logging.info(f'{self.__str__()} setup_sequence loaded Nidaq: {self.nidaq}')
         return super().setup_sequence(sequence)
         
     def exec_sequenced_event(self, event: 'SequencedEvent') -> Iterable['PImagePayload']:
@@ -163,23 +156,9 @@ class PupilEngine(MDAEngine):
         event_t0_ms = (time.perf_counter() - t0) * 1000
 
         #https://github.com/pymmcore-plus/useq-schema/issues/213 
-        if self.nidaq is not None and self.io_type == "DO":
-            data = [True, True, False]
-            task = nidaqmx.Task()
-            task.do_channels.add_do_chan(lines=f"{self.nidaq}/{self.lines}")
-            task.start()
-            task.write(data)
-            logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
-            task.stop()
-            task.close()
+        if self.nidaq is not None:# and self.io_type == "DO":
+            self.nidaq.start()
 
-        elif self.nidaq is not None and self.io_type == "DI":
-            with nidaqmx.Task() as task:
-                task.di_channels.add_di_chan(lines=f"{self.nidaq}/{self.lines}")
-                logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.nidaq}/{self.lines} waiting for trigger')
-                while not task.read():
-                    pass
-                logging.info(f'{self.__str__()}.exec_sequenced_event Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
 
         # Start sequence
         # Note that the overload of startSequenceAcquisition that takes a camera
@@ -207,7 +186,7 @@ class PupilEngine(MDAEngine):
                     )
                     count += 1
                 else:
-                    if count == n_events or self._mmc1.isSequenceRunning() is not True:
+                    if count == n_events or self._mmc1 is not None and self._mmc1.isSequenceRunning() is not True:
                         logging.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
                         self._mmc.stopSequenceAcquisition() 
                         break
@@ -229,19 +208,20 @@ class PupilEngine(MDAEngine):
     def teardown_sequence(self, sequence: useq.MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
         logging.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
+        # self.nidaq.stop()
+        # # Save exposure times from nidaq
+        # times = self.nidaq.get_exposure_times()
+        # path = self._config.make_path('nidaq_timestamps', 'txt', 'func')
+        # with open(path, 'w') as f:
+        #     for t in times:
+        #         f.write(f"{t}\n")
+        
         #self._encoder.stop()
         # Get and store the encoder data
         #self._wheel_data = self._encoder.get_data()
         #self._config.save_wheel_encoder_data(self._wheel_data)
         #self._config.save_configuration()
 
-        # if self.nidaq is not None and self.io_type == "DO":
-        #         with nidaqmx.Task() as task:
-        #             task.do_channels.add_do_chan(lines=f"{self.nidaq}/{self.lines}")
-        #             task.start()
-        #             task.write(False)
-        #             task.stop()
-        #             logging.info(f'{self.__str__()}.teardown_sequence Nidaq {self.io_type} from {self.nidaq}/{self.lines}')
         pass
     
 

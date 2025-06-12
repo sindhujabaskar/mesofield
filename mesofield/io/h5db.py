@@ -3,7 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-import pandas as pd
+import pandas as pd  # type: ignore[import]
+import logging
+logging.getLogger("tables").setLevel(logging.ERROR)
+
+import warnings
+from pandas.io.pytables import PerformanceWarning
+warnings.filterwarnings("ignore", category=PerformanceWarning)
 
 
 class H5Database:

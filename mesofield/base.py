@@ -113,10 +113,12 @@ class Procedure:
                 if hasattr(device, "device_type") and hasattr(device, "get_data"):
                     self.data_manager.register_hardware_device(device)
             self.logger.info("Hardware initialized successfully")
-            self.events.hardware_initialized.emit(True)
+            if hasattr(self.events.hardware_initialized, "emit"):
+                self.events.hardware_initialized.emit(True)
         except Exception as e:  # pragma: no cover - initialization failures
             self.logger.error(f"Failed to initialize hardware: {e}")
-            self.events.hardware_initialized.emit(False)
+            if hasattr(self.events.hardware_initialized, "emit"):
+                self.events.hardware_initialized.emit(False)
 
     # ------------------------------------------------------------------
     def setup_configuration(self, json_config: Optional[str]) -> None:
@@ -128,6 +130,7 @@ class Procedure:
     def run(self) -> None:
         """Run the standard Mesofield workflow."""
         self.logger.info("Starting experiment")
+        self.data_manager.start_queue_logger()
         try:
             recorders = []
             for cam in self.hardware.cameras:
@@ -142,7 +145,7 @@ class Procedure:
                     cam.metadata_path = writer._frame_metadata_filename
                 recorders.append((cam.core, self._config.build_sequence(cam), writer))
                 
-            self.hardware.cameras[1].core.mda.events.sequenceFinished.connect(self._cleanup_procedure)
+            self.hardware.cameras[0].core.mda.events.sequenceFinished.connect(self._cleanup_procedure)
 
             if self._config.get("start_on_trigger", False):
                 self.psychopy_process = self._launch_psychopy()
@@ -174,7 +177,8 @@ class Procedure:
                 started = getattr(device, "_started", "")
                 stopped = getattr(device, "_stopped", "")
                 writer.writerow([device_id, started, stopped])
-
+        self.data_manager.stop_queue_logger()
+        self.config.save_wheel_encoder_data(self.config.hardware.encoder.get_data())
         self.logger.info("Data saved successfully")
 
     # ------------------------------------------------------------------
@@ -189,11 +193,13 @@ class Procedure:
     def _cleanup_procedure(self):
         self.logger.info("Cleanup Procedure")
         try:
+            self.hardware.cameras[0].core.mda.events.sequenceFinished.disconnect(self._cleanup_procedure)
             if hasattr(self, "psychopy_process"):
                 del self.psychopy_process
             self.stop_cameras()
             self.stop_encoder()
             self.stopped_time = datetime.now()
+            self.config.hardware.nidaq.reset()
             self.save_data()
             if hasattr(self, "data_manager"):
                 self.data_manager.update_database()
