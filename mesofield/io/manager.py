@@ -211,9 +211,9 @@ class DataManager:
         self.devices.append(device)
 
         # Try to connect various callback styles to push data to our queue
-        def _push(data: Any, *, dev=device) -> None:
+        def _push(payload: Any, device_ts: Any = None, *, dev=device) -> None:
             dev_id = getattr(dev, "device_id", getattr(dev, "id", "unknown"))
-            self.data_queue.push(dev_id, data)
+            self.data_queue.push(dev_id, payload, device_ts=device_ts)
 
         # Connect using a standard data_event if present
         evt = getattr(device, "data_event", None)
@@ -241,7 +241,7 @@ class DataManager:
             except Exception:
                 pass
 
-        if sig is None:
+        if sig is None and hasattr(device, "core"):
             # connect metadata-only from core.mda.events.frameReady
             sig = getattr(device.core.mda.events, "frameReady", None)
             if sig is not None and hasattr(sig, "connect"):
