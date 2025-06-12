@@ -1,4 +1,38 @@
 from __future__ import annotations
+"""
+DataManager & DataSaver Workflow Overview
+1. Initialization
+    ├─ dm = DataManager()
+    ├─ dm.set_config(config)      # attaches ExperimentConfig instance -> DataSaver(config)
+    └─ dm.set_database(path)      # attaches H5Database(path) instance
+2. Optional data persistence via DataSaver
+    ├─ dm.saver.save_config()         # writes experiment config to disk
+    ├─ dm.saver.save_encoder_data(df) # writes encoder CSV + updates encoder.output_path
+    ├─ dm.saver.save_notes()          # writes notes.txt if any
+    └─ dm.saver.writer_for(camera)    # returns `CustomWriter`, sets camera.output_path & metadata_path
+3. Final database update: dm.update_database()
+    update_database()
+    ├─ camera data
+    │   └─ sessiondb.camera_dataframe(cameras, subject, session)
+    │       └─ dm.append_to_database(df, key="camera_data")
+    ├─ encoder data
+    │   └─ sessiondb.encoder_dataframe(encoder, subject, session)
+    │       └─ dm.append_to_database(df, key="encoder")
+    ├─ device files
+    │   └─ dm.get_device_outputs(subject, session)
+    │       └─ dm.append_to_database(df, key="device_files")
+    ├─ notes
+    │   └─ sessiondb.notes_dataframe(notes, subject, session)
+    │       └─ dm.append_to_database(df, key="notes")
+    ├─ timestamps
+    │   └─ sessiondb.timestamps_dataframe(bids_dir, subject, session)
+    │       └─ dm.append_to_database(df, key="timestamps")
+    └─ config snapshot
+         └─ sessiondb.config_dataframe(config)
+              └─ dm.append_to_database(df, key="config")
+              
+• Each block is wrapped in try/except to log errors and continue remaining steps.
+"""
 
 from dataclasses import dataclass
 from typing import Optional, List, Any
