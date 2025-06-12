@@ -292,7 +292,7 @@ class Nidaq:
     def __post_init__(self):
         self._started: datetime # Timestamp when the device was started
         self._stopped: datetime # Timestamp when the device was stopped
-        self.data_event = Event() 
+        self.data_event = Event()         self.data_event = Event() 
         if self.config is None:
             self.config = {
                 "device_name": self.device_name,
@@ -352,10 +352,19 @@ class Nidaq:
             ts = time.time()
 
             # 2) Trigger camera
+            # 1) Start Read count & timestamp
+            cnt = self._ci.read()
+            ts = time.time()
+
+            # 2) Trigger camera
             self._do.write(True)
             time.sleep(self.pulse_width)
             self._do.write(False)
 
+            # 3) For each new edge, record the timestamp
+            new_count = int(cnt)
+            if new_count > prev_count:
+                event_data = [ts] * (new_count - prev_count)
             # 3) For each new edge, record the timestamp
             new_count = int(cnt)
             if new_count > prev_count:
@@ -384,6 +393,7 @@ class Nidaq:
         """Close the device."""
         self.stop()
     
+    def get_data(self) -> list[float]:
     def get_data(self) -> list[float]:
         """Retrieve a copy of the host-time exposure timestamps."""
         with self._lock:
