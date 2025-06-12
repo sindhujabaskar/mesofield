@@ -394,7 +394,6 @@ class Nidaq:
         self.stop()
     
     def get_data(self) -> list[float]:
-    def get_data(self) -> list[float]:
         """Retrieve a copy of the host-time exposure timestamps."""
         with self._lock:
             return list(self._exposure_times)
