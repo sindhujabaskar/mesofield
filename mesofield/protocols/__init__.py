@@ -126,6 +126,13 @@ class HardwareDevice(Protocol):
         """
         ...
     
+    def stop(self):
+        """Stop the hardware device after starting it.
+        
+        This method will be called by the HardwareManager when a Procedure cleans up
+        """
+        ...
+    
     def shutdown(self) -> None:
         """Close and clean up resources."""
         ...
@@ -153,6 +160,8 @@ class DataProducer(HardwareDevice, Protocol):
     sampling_rate: float  # in Hz
     data_type: str
     is_active: bool
+    output_path: str
+    metadata_path: Optional[str] = None
     
     def start(self) -> bool:
         """Start data acquisition or operation.
@@ -169,7 +178,11 @@ class DataProducer(HardwareDevice, Protocol):
             bool: True if stopped successfully, False otherwise.
         """
         ...
-    
+        
+    def save_data(self, path: Optional[str] = None):
+        """Save the device data captured during the recording"""
+        ...
+        
     def get_data(self) -> Optional[Any]:
         """Get the latest data from the producer.
         
