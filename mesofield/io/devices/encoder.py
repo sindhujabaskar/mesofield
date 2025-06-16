@@ -72,7 +72,7 @@ class SerialWorker(QThread):
                          f"development mode: {development_mode}")
         self.development_mode = development_mode
         self.device_id = f"encoder_{serial_port}" if not development_mode else "encoder_dev"
-        
+        self.output_path: str = ''  # Path to save recorded data
         # Create config dictionary for protocol compliance
         self.config = {
             "serial_port": serial_port,
@@ -183,7 +183,6 @@ class SerialWorker(QThread):
         
         try:
             self.arduino = serial.Serial(self.serial_port, self.baud_rate, timeout=0.1)
-            print("Serial port opened.")
         except serial.SerialException as e:
             print(f"Serial connection error: {e}")
             return
@@ -206,7 +205,6 @@ class SerialWorker(QThread):
             if hasattr(self, 'arduino') and self.arduino is not None:
                 try:
                     self.arduino.close()
-                    print("Serial port closed.")
                 except Exception as e:
                     print(f"Exception while closing serial port: {e}")
 
@@ -266,6 +264,18 @@ class SerialWorker(QThread):
         self.speeds = []
         self.start_time = time.time()
     
+    def save_data(self):
+        """Save the recorded data to a file if output_path is set."""
+        if not self.output_path:
+            self.logger.warning("No output path specified for saving data.")
+            return
+        
+        try:
+            df = self.get_data()
+            df.to_csv(self.output_path, index=False)
+            self.logger.info(f"Data saved to {self.output_path}")
+        except Exception as e:
+            self.logger.error(f"Failed to save data: {e}")
 
     def __repr__(self):
         class_name = self.__class__.__name__
