@@ -14,9 +14,9 @@ if TYPE_CHECKING:
 from pymmcore_plus.metadata import SummaryMetaV1
 from pymmcore_plus.mda import MDAEngine
 import nidaqmx
-import logging
-logging.basicConfig(filename='engine.log', level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+from mesofield.utils._logger import get_logger
+
+logger = get_logger(__name__)
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ class MesoEngine(MDAEngine):
         self._mmc.getPropertyObject('Arduino-Switch', 'State').setValue(4) # seems essential to initiate serial communication
         self._mmc.getPropertyObject('Arduino-Switch', 'State').startSequence()
 
-        logging.info(f'{self.__str__()} setup_sequence loaded LED sequence at time: {time.time()}')
+        logger.info(f'{self.__str__()} setup_sequence loaded LED sequence at time: {time.time()}')
 
         print('Arduino loaded')
         return super().setup_sequence(sequence)
@@ -75,7 +75,7 @@ class MesoEngine(MDAEngine):
             0,  # intervalMS  
             True,  # stopOnOverflow
         )
-        logging.info(f'{self.__str__()} exec_sequenced_event with {n_events} events at t0 {t0}')
+        logger.info(f'{self.__str__()} exec_sequenced_event with {n_events} events at t0 {t0}')
         self.post_sequence_started(event)
 
         n_channels = self._mmc.getNumberOfCameraChannels()
@@ -90,17 +90,17 @@ class MesoEngine(MDAEngine):
                 count += 1
             else:
                 if count == n_events:
-                    logging.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')                 
+                    logger.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
                     break
                     #self._mmc.stopSequenceAcquisition() Might be source of early cutoff by not allowing engine to save the rest of image in buffer
                 #time.sleep(0.001) #does not seem to optimize performance either way
 
         if self._mmc.isBufferOverflowed():  # pragma: no cover
-            logging.debug(f'OVERFLOW {self.__str__()}; Images in buffer: {self.mmcore.getRemainingImageCount()}')
+            logger.debug(f'OVERFLOW {self.__str__()}; Images in buffer: {self.mmcore.getRemainingImageCount()}')
             raise MemoryError("Buffer overflowed")
 
         while remaining := self._mmc.getRemainingImageCount():
-            logging.debug(f'{self.__str__()} Saving Remaining Images in buffer \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
+            logger.debug(f'{self.__str__()} Saving Remaining Images in buffer \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
             yield self._next_seqimg_payload(
                 *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
             )
@@ -108,7 +108,7 @@ class MesoEngine(MDAEngine):
     
     def teardown_sequence(self, sequence: useq.MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
-        logging.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
+        logger.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
         
         # Stop the Arduino LED Sequence
         self._mmc.getPropertyObject('Arduino-Switch', 'State').stopSequence()
@@ -138,7 +138,7 @@ class PupilEngine(MDAEngine):
         self.nidaq = sequence.metadata.get("nidaq")
         if self.nidaq is not None:
             self.nidaq.reset()
-        logging.info(f'{self.__str__()} setup_sequence loaded Nidaq: {self.nidaq}')
+        logger.info(f'{self.__str__()} setup_sequence loaded Nidaq: {self.nidaq}')
         return super().setup_sequence(sequence)
         
     def exec_sequenced_event(self, event: 'SequencedEvent') -> Iterable['PImagePayload']:
@@ -169,7 +169,7 @@ class PupilEngine(MDAEngine):
             0,  # intervalMS  # TODO: add support for this
             True,  # stopOnOverflow
         )
-        logging.info(f'{self.__str__()} exec_sequenced_event with {n_events} events at t0 {t0}')
+        logger.info(f'{self.__str__()} exec_sequenced_event with {n_events} events at t0 {t0}')
         self.post_sequence_started(event)
 
         n_channels = self._mmc.getNumberOfCameraChannels()
@@ -187,7 +187,7 @@ class PupilEngine(MDAEngine):
                     count += 1
                 else:
                     if count == n_events or self._mmc1 is not None and self._mmc1.isSequenceRunning() is not True:
-                        logging.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
+                        logger.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
                         self._mmc.stopSequenceAcquisition() 
                         break
                     time.sleep(0.001)
@@ -195,11 +195,11 @@ class PupilEngine(MDAEngine):
                 break
 
         if self._mmc.isBufferOverflowed():  # pragma: no cover
-            logging.debug(f'OVERFLOW {self.__str__()} MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
+            logger.debug(f'OVERFLOW {self.__str__()} MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
             raise MemoryError("Buffer overflowed")
 
         while remaining := self._mmc.getRemainingImageCount():
-            logging.debug(f'{self.__str__()} Saving Remaining Images in buffer \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
+            logger.debug(f'{self.__str__()} Saving Remaining Images in buffer \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
             yield self._next_seqimg_payload(
                 *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
             )
@@ -207,7 +207,7 @@ class PupilEngine(MDAEngine):
     
     def teardown_sequence(self, sequence: useq.MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
-        logging.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
+        logger.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
         # self.nidaq.stop()
         # # Save exposure times from nidaq
         # times = self.nidaq.get_exposure_times()
@@ -261,7 +261,7 @@ class DevEngine(MDAEngine):
             0,  # intervalMS  
             True,  # stopOnOverflow
         )
-        logging.info(f'{self.__str__()} exec_sequenced_event with {n_events} events at t0 {t0}')
+        logger.info(f'{self.__str__()} exec_sequenced_event with {n_events} events at t0 {t0}')
         self.post_sequence_started(event)
 
         n_channels = self._mmc.getNumberOfCameraChannels()
@@ -277,7 +277,7 @@ class DevEngine(MDAEngine):
                     count += 1
                 else:
                     if count == n_events:
-                        logging.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
+                        logger.debug(f'{self.__str__()} stopped MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
                         self._mmc.stopSequenceAcquisition() 
                         break
                     time.sleep(0.001)
@@ -285,11 +285,11 @@ class DevEngine(MDAEngine):
                 break
 
         if self._mmc.isBufferOverflowed():  # pragma: no cover
-            logging.debug(f'OVERFLOW {self.__str__()} MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
+            logger.debug(f'OVERFLOW {self.__str__()} MDA: \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
             raise MemoryError("Buffer overflowed")
 
         while remaining := self._mmc.getRemainingImageCount():
-            logging.debug(f'{self.__str__()} Saving Remaining Images in buffer \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
+            logger.debug(f'{self.__str__()} Saving Remaining Images in buffer \n{self._mmc} with \n{count} events and \n{remaining} remaining with \n{self._mmc.getRemainingImageCount()} images in buffer')
             yield self._next_seqimg_payload(
                 *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
             )
@@ -297,7 +297,7 @@ class DevEngine(MDAEngine):
     
     def teardown_sequence(self, sequence: useq.MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
-        logging.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
+        logger.info(f'{self.__str__()} teardown_sequence at time: {time.time()}')
         # self._encoder.stop()
         # Get and store the encoder data
         # self._wheel_data = self._encoder.get_data()

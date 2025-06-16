@@ -99,6 +99,10 @@ class DataSaver:
     cfg: ExperimentConfig
     logger: Logger = field(default_factory=lambda: get_logger("DataSaver"))
 
+    def __post_init__(self) -> None:  # pragma: no cover - logging only
+        from mesofield.utils import _logger
+        self.logger.info(f"Logging directory: {_logger._log_dir}")
+
     def configuration(self, suffix: str = "configuration") -> None:
         """Save the ExperimentConfig registry to a CSV file."""
         
@@ -109,8 +113,8 @@ class DataSaver:
             params_df = pd.DataFrame(list(registry_items.items()), columns=['Parameter', 'Value'])
             params_df.to_csv(self.params_path, index=False)
             self.logger.info(f"Configuration saved to {self.params_path}")
-        except Exception as e:
-            self.logger.error(f"Error saving configuration: {e}")
+        except Exception:
+            self.logger.exception("Error saving configuration")
 
     def hardware(self) -> None:
         """Call `save_data()` method for all hardware devices registered to the HardwareManager."""
@@ -119,8 +123,8 @@ class DataSaver:
         for device in self.cfg.hardware.devices.values():
             try:
                 device.save_data()
-            except Exception as e:
-                self.logger.error(f"Error saving device {device} state: {e}")
+            except Exception:
+                self.logger.exception(f"Error saving device {device} state")
 
     def notes(self) -> None:
         """Persist user notes if present."""
@@ -131,8 +135,8 @@ class DataSaver:
             with open(self.notes_path, 'w') as f:
                 f.write('\n'.join(self.cfg.notes))
                 self.logger.info(f"Notes saved to {self.notes_path}")
-        except Exception as e:
-            self.logger.error(f"Error saving notes: {e}")
+        except Exception:
+            self.logger.exception("Error saving notes")
 
     #TODO: move this logic to the MMCamera class itself
     def writer_for(self, camera) -> CustomWriter:
@@ -327,49 +331,49 @@ class DataManager:
             cam_df = sessiondb.camera_dataframe(cfg.hardware.cameras, subject, session)
             if not cam_df.empty:
                 self.append_to_database(cam_df, key="camera_data")
-        except Exception as e:  # pragma: no cover - optional
-            cfg.logger.error(f"Database update failed while storing camera data: {e}")
+        except Exception:  # pragma: no cover - optional
+            cfg.logger.exception("Database update failed while storing camera data")
 
         try:
             encoder = cfg.hardware.get_encoder()
             enc_df = sessiondb.encoder_dataframe(encoder, subject, session)
             if not enc_df.empty:
                 self.append_to_database(enc_df, key="encoder")
-        except Exception as e:  # pragma: no cover - optional
-            cfg.logger.error(f"Database update failed while storing encoder data: {e}")
+        except Exception:  # pragma: no cover - optional
+            cfg.logger.exception("Database update failed while storing encoder data")
 
         try:
             dev_df = self.get_device_outputs(subject, session)
             if not dev_df.empty:
                 self.append_to_database(dev_df, key="device_files")
-        except Exception as e:  # pragma: no cover - optional
-            cfg.logger.error(f"Database update failed while storing device outputs: {e}")
+        except Exception:  # pragma: no cover - optional
+            cfg.logger.exception("Database update failed while storing device outputs")
 
         try:
             notes_df = sessiondb.notes_dataframe(cfg.notes, subject, session)
             if not notes_df.empty:
                 self.append_to_database(notes_df, key="notes")
-        except Exception as e:  # pragma: no cover - optional
-            cfg.logger.error(f"Database update failed while storing notes: {e}")
+        except Exception:  # pragma: no cover - optional
+            cfg.logger.exception("Database update failed while storing notes")
 
         try:
             ts_df = sessiondb.timestamps_dataframe(cfg.bids_dir, subject, session)
             if not ts_df.empty:
                 self.append_to_database(ts_df, key="timestamps")
-        except Exception as e:  # pragma: no cover - optional
-            cfg.logger.error(f"Database update failed while storing timestamps: {e}")
+        except Exception:  # pragma: no cover - optional
+            cfg.logger.exception("Database update failed while storing timestamps")
 
         try:
             if self.queue_log_path:
                 q_df = sessiondb.queue_dataframe(self.queue_log_path, subject, session)
                 if not q_df.empty:
                     self.append_to_database(q_df, key="queue_stream")
-        except Exception as e:  # pragma: no cover - optional
-            cfg.logger.error(f"Database update failed while storing queue data: {e}")
+        except Exception:  # pragma: no cover - optional
+            cfg.logger.exception("Database update failed while storing queue data")
 
         try:
             cfg_df = sessiondb.config_dataframe(cfg)
             if not cfg_df.empty:
                 self.append_to_database(cfg_df, key="config")
-        except Exception as e:  # pragma: no cover - optional
-            cfg.logger.error(f"Database update failed while storing config: {e}")
+        except Exception:  # pragma: no cover - optional
+            cfg.logger.exception("Database update failed while storing config")
