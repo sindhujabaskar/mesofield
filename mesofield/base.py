@@ -13,9 +13,9 @@ from typing import Dict, Any, Optional, Type
 
 from mesofield.config import ExperimentConfig
 from mesofield.hardware import HardwareManager
-from mesofield.io.manager import DataManager
+from mesofield.data.manager import DataManager
 from mesofield.utils._logger import get_logger
-from mesofield.io.writer import CustomWriter
+from mesofield.data.writer import CustomWriter
 from PyQt6.QtCore import QObject, pyqtSignal
 
 class ProcedureSignals(QObject):
@@ -104,18 +104,18 @@ class Procedure:
         The `DataManager` singleton is initialized here, too, as an attribute of the `Procedure` instance. 
         """
         try:
-            self._config.hardware._initialize_devices()
-            self._config.hardware._configure_engines(self._config)
-            self.data_manager = DataManager()
-            self.data_manager.set_config(self._config)
-            self.data_manager.set_database(self.h5_path)
-            for device in self._config.hardware.devices.values():
-                if hasattr(device, "device_type") and hasattr(device, "get_data"):
-                    self.data_manager.register_hardware_device(device)
+            self._config.hardware.initialize(self._config)
+
+            self.data = DataManager()
+            self.data.setup(
+                self._config,
+                self.h5_path,
+                self._config.hardware.devices.values(),
+            )
             self.logger.info("Hardware initialized successfully")
             if hasattr(self.events.hardware_initialized, "emit"):
                 self.events.hardware_initialized.emit(True)
-        except Exception as e:  # pragma: no cover - initialization failures
+        except RuntimeError as e:  # pragma: no cover - initialization failures
             self.logger.error(f"Failed to initialize hardware: {e}")
             if hasattr(self.events.hardware_initialized, "emit"):
                 self.events.hardware_initialized.emit(False)
@@ -130,13 +130,13 @@ class Procedure:
     def run(self) -> None:
         """Run the standard Mesofield workflow."""
         self.logger.info("Starting experiment")
-        self.data_manager.start_queue_logger()
+        self.data.start_queue_logger()
         try:
             recorders = []
             for cam in self.hardware.cameras:
                 writer = (
-                    self.data_manager.saver.writer_for(cam)
-                    if self.data_manager.saver
+                    self.data.save.writer_for(cam)
+                    if self.data.save
                     else CustomWriter(self._config.make_path(cam.name, "ome.tiff", bids_type="func"))
                 )
                 if not hasattr(cam, "output_path"):
@@ -161,77 +161,55 @@ class Procedure:
 
     # ------------------------------------------------------------------
     def save_data(self) -> None:
-        import csv
 
-        if hasattr(self, "data_manager") and getattr(self.data_manager, "saver", None):
-            self.data_manager.saver.save_config()
-            self.data_manager.saver.save_notes()
-        else:
-            self._config.save_configuration()
+        self.data.save.configuration()
+        self.data.save.notes()
+        self.data.save.hardware()
+        self.save_timestamps()
+        self.logger.info("Data saved successfully")
+
+    def save_timestamps(self):
+        """Save timestamps of the experiment and hardware devices."""
+        import csv
+        
         timestamps_path = os.path.join(self._config.bids_dir, "timestamps.csv")
         with open(timestamps_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(["device_id", "started", "stopped"])
-            writer.writerow(["experiment_id", self.start_time, self.stopped_time])
+            writer.writerow([self.experiment_id, self.start_time, self.stopped_time])
             for device_id, device in self.hardware.devices.items():
                 started = getattr(device, "_started", "")
                 stopped = getattr(device, "_stopped", "")
                 writer.writerow([device_id, started, stopped])
-        self.data_manager.stop_queue_logger()
-        self.config.save_wheel_encoder_data(self.config.hardware.encoder.get_data())
-        self.logger.info("Data saved successfully")
 
     # ------------------------------------------------------------------
     def _launch_psychopy(self):
         from mesofield.subprocesses.psychopy import PsychoPyProcess
         return PsychoPyProcess(self._config)
 
-    def _wait_for_trigger(self):
-        self.logger.info("Waiting for trigger...")
-        input("Press Enter to start recording...")
 
     def _cleanup_procedure(self):
         self.logger.info("Cleanup Procedure")
         try:
+            self.hardware.cameras[1].core.stopSequenceAcquisition()
             self.hardware.cameras[0].core.mda.events.sequenceFinished.disconnect(self._cleanup_procedure)
-            if hasattr(self, "psychopy_process"):
-                del self.psychopy_process
-            self.stop_cameras()
-            self.stop_encoder()
+            self.hardware.stop()
+            self.data.stop_queue_logger()
             self.stopped_time = datetime.now()
-            self.config.hardware.nidaq.reset()
             self.save_data()
             if hasattr(self, "data_manager"):
-                self.data_manager.update_database()
+                self.data.update_database()
         except Exception as e:  # pragma: no cover - cleanup failure
             self.logger.error(f"Error during cleanup: {e}")
 
     # ------------------------------------------------------------------
-    def start_cameras(self) -> bool:
-        try:
-            for camera in self.hardware.cameras:
-                if hasattr(camera, "start"):
-                    camera.start()
-            return True
-        except Exception as e:
-            self.logger.error(f"Failed to start cameras: {e}")
-            return False
 
-    def stop_cameras(self) -> bool:
-        try:
-            for camera in self.hardware.cameras:
-                if hasattr(camera, "stop"):
-                    camera.stop()
-            return True
-        except Exception as e:
-            self.logger.error(f"Failed to stop cameras: {e}")
-            return False
 
     def start_encoder(self) -> bool:
         try:
             encoder = self.hardware.get_encoder()
             if encoder and hasattr(encoder, "start_recording"):
-                path = self._config.make_path(encoder.device_id, "csv", "beh")
+                path = self._config.make_path("encoder-data", "csv", "beh")
                 encoder.output_path = path
                 encoder.start_recording(path)
                 return True
@@ -240,28 +218,16 @@ class Procedure:
             self.logger.error(f"Failed to start encoder: {e}")
             return False
 
-    def stop_encoder(self) -> bool:
-        try:
-            encoder = self.hardware.get_encoder()
-            if encoder and hasattr(encoder, "stop"):
-                encoder.stop()
-                return True
-            return False
-        except Exception as e:
-            self.logger.error(f"Failed to stop encoder: {e}")
-            return False
 
     def add_note(self, note: str) -> None:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._config.notes.append(f"{timestamp}: {note}")
         self.logger.info(f"Added note: {note}")
 
-
-
     def load_database(self, key: str = "data"):
         """Return a DataFrame with all sessions stored for this Procedure."""
         if hasattr(self, "data_manager"):
-            return self.data_manager.read_database(key)
+            return self.data.read_database(key)
         return None
 
 
