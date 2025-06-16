@@ -24,14 +24,14 @@ from mesofield.protocols import Procedure
 class MainWindow(QMainWindow):
     def __init__(self, procedure: Procedure):
         super().__init__()
-        self.config: ExperimentConfig = cast(ExperimentConfig, procedure.config)
+        #self.config: ExperimentConfig = cast(ExperimentConfig, procedure.config)
         self.procedure = procedure
         window_icon = QIcon(os.path.join(os.path.dirname(__file__), "Mesofield_icon.png"))
         self.setWindowIcon(window_icon)        
         #============================== Widgets =============================#
-        self.acquisition_gui = MDA(self.config)
-        self.config_controller = ConfigController(self.config, self.procedure)
-        self.encoder_widget = EncoderWidget(self.config)
+        self.acquisition_gui = MDA(self.procedure.config)
+        self.config_controller = ConfigController(self.procedure)
+        self.encoder_widget = EncoderWidget(self.procedure.config)
         self.initialize_console(self.procedure) # Initialize the IPython console
         #--------------------------------------------------------------------#
 

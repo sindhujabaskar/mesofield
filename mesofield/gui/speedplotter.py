@@ -1,12 +1,13 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 import pyqtgraph as pg
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from mesofield.config import ExperimentConfig
+from mesofield.protocols import Configurator
+# from typing import TYPE_CHECKING
+# if TYPE_CHECKING:
+#     from mesofield.config import ExperimentConfig
 
 class EncoderWidget(QWidget):
-    def __init__(self, cfg: 'ExperimentConfig'):
+    def __init__(self, cfg: 'Configurator'):
         super().__init__()
         self.config = cfg
         self.init_ui()

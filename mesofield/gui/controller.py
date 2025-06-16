@@ -97,9 +97,9 @@ class ConfigController(QWidget):
     configUpdated = pyqtSignal(object)
     recordStarted = pyqtSignal(str)
     # ------------------------------------------------------------------------------------- #
-    def __init__(self, cfg: 'ExperimentConfig', procedure: 'Procedure'):
+    def __init__(self, procedure: 'Procedure'):
         super().__init__()
-        self.config = cfg
+        self.config = procedure.config 
         self.procedure = procedure
 
         # Create main layout
@@ -136,7 +136,7 @@ class ConfigController(QWidget):
         layout.addLayout(json_layout)
 
         # 3. Table view to display the configuration parameters loaded from the JSON
-        self.config_model = ConfigFormWidget(self.config)
+        self.config_model = ConfigFormWidget(self.procedure.config)
         layout.addWidget(self.config_model)
 
         # 4. Record button to start the MDA sequence
@@ -174,7 +174,7 @@ class ConfigController(QWidget):
         layout.addWidget(self.add_note_button)
 
         # Dynamic hardware-specific controls
-        self.dynamic_controller = DynamicController(cfg, parent=self)
+        self.dynamic_controller = DynamicController(self.procedure.config, parent=self)
         layout.addWidget(self.dynamic_controller)
         # ------------------------------------------------------------------------------------- #
 
