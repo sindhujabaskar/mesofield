@@ -17,6 +17,10 @@ Key features:
 
 NOTE: This has only been tested on Windows 10/11. Hardware control features rely on pymmcore-plus and an installation of MicroManager with specific device drivers.
 
+All uncaught exceptions are logged to `logs/mesofield.log`. When an error occurs
+that isn't handled, the console will display a short message directing you to
+this file for the full traceback.
+
 ## Core Components
 
 ### Hardware Devices

@@ -8,6 +8,7 @@ Just import and use:
 """
 
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -47,6 +48,19 @@ class ColoredFormatter(logging.Formatter):
 
 _configured = False
 _log_dir: Optional[Path] = None
+
+
+def install_excepthook() -> None:
+    """Log uncaught exceptions to the mesofield log file."""
+
+    def _handle(exc_type, exc_value, exc_traceback):
+        logger = logging.getLogger("mesofield")
+        logger.exception("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+        if _log_dir is not None:
+            log_file = _log_dir / "mesofield.log"
+            print(f"Uncaught exception. See {log_file} for details.")
+
+    sys.excepthook = _handle
 
 def setup_logging(log_dir: Optional[str] = None, level: str = "INFO") -> None:
     global _configured, _log_dir
@@ -92,6 +106,8 @@ def setup_logging(log_dir: Optional[str] = None, level: str = "INFO") -> None:
     fh.setFormatter(file_formatter)
 
     root.addHandler(fh)
+
+    install_excepthook()
 
     _configured = True
 
