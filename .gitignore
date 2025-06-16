@@ -1,3 +1,8 @@
+#mesofield
+/data/
+/logs/
+/mesofield/logs/
+./hardware.yaml
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -7,6 +12,7 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+.conda/
 .Python
 build/
 develop-eggs/
@@ -169,3 +175,5 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+hardware.yaml
+hardware.yaml
