@@ -47,7 +47,7 @@ from datetime import datetime
 import pandas as pd
 
 from mesofield.config import ExperimentConfig
-from mesofield.data.writer import CustomWriter
+from mesofield.data.writer import CustomWriter, CV2Writer
 from mesofield.io.h5db import H5Database
 from mesofield.io import sessiondb
 from mesofield.utils._logger import get_logger, log_this_fr
@@ -214,12 +214,24 @@ class DataSaver:
         except Exception as e:
             self.logger.error(f"Error saving timestamps: {e}")
 
-    def writer_for(self, camera) -> CustomWriter:
-        path = self.cfg.make_path(camera.name, "ome.tiff", "func")
+    def writer_for(self, camera) -> Any:
+        # choose writer based on camera.file_type
+        file_type = getattr(camera, "file_type", None)
+        if file_type == "ome.tiff":
+            path = self.cfg.make_path(camera.name, "ome.tiff", "func")
+            writer = CustomWriter(path)
+            camera.output_path = writer._filename
+            camera.metadata_path = writer._frame_metadata_filename
+        elif file_type == "mp4":
+            path = self.cfg.make_path(camera.name, "mp4", "func")
+            # assume camera.fps exists or default to 30
+            fps = getattr(camera, "fps", 30)
+            writer = CV2Writer(path, fps=fps)
+            camera.output_path = path
+        else:
+            raise ValueError(f"Unsupported camera file_type: {file_type}")
+
         self.paths.writers[camera.name] = path
-        writer = CustomWriter(path)
-        camera.output_path = writer._filename
-        camera.metadata_path = writer._frame_metadata_filename
         self.logger.info(f"Writer for {camera.name} set to {path}")
         return writer
     
