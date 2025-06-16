@@ -79,7 +79,6 @@ class MainWindow(QMainWindow):
 
         #============================== Signals =============================#
         self.toggle_console_action.toggled.connect(self.console_dock.setVisible)
-        self.config_controller.recordStarted.connect(self.record)
 
         # re‐compute your “minimum size” to preserve the layout 
         self.console_dock.visibilityChanged.connect(self.adjustSize)
@@ -91,10 +90,6 @@ class MainWindow(QMainWindow):
         #--------------------------------------------------------------------#
 
     #============================== Methods =================================#    
-    def record(self, timestamp):
-        self.config.register_parameter("recording_started", timestamp)
-
-
     def toggle_console(self):
         """Show or hide the docked IPython console."""
         self.console_dock.setVisible(not self.console_dock.isVisible())
