@@ -83,10 +83,6 @@ class ConfigRegister:
             self._callbacks[key] = []
         self._callbacks[key].append(callback)
     
-    def unregister_callback(self, key: str, callback: Callable[[str, Any], None]) -> None:
-        """Unregister a callback."""
-        if key in self._callbacks and callback in self._callbacks[key]:
-            self._callbacks[key].remove(callback)
     
     def clear(self) -> None:
         """Clear all configurations."""
@@ -123,7 +119,6 @@ class ExperimentConfig(ConfigRegister):
         
         # Initialize the configuration registry
         self._json_file_path = ''
-        self._output_path = ''
         self._save_dir = ''
         self._parameters: dict = {}  # NOTE: For backward compatibility
 
@@ -205,13 +200,6 @@ class ExperimentConfig(ConfigRegister):
         """Calculate the number of trials."""
         return int(self.get("num_trials", self._parameters.get('num_trials', 1)))
     
-    @property
-    def parameters(self) -> dict:
-        """Get all parameters as a dictionary."""
-        # Merge registry with legacy parameters for backward compatibility
-        params = self.items()
-        params.update(self._parameters)
-        return params
     
     def build_sequence(self, camera: DataProducer) -> useq.MDASequence:
         if self.has('num_meso_frames'):
@@ -240,10 +228,6 @@ class ExperimentConfig(ConfigRegister):
         )
         return os.path.abspath(os.path.join(self.save_dir, bids))
 
-    @property
-    def notes_file_path(self):
-        """Get the notes file path."""
-        return self.make_path(suffix="notes", extension="txt")
     
     @property
     def dataframe(self):
@@ -348,114 +332,13 @@ class ExperimentConfig(ConfigRegister):
             return
             
         self._json_file_path = file_path #store the json filepath
-        
+        #TODO: set output_paths for all devices using the `make_path` method 
+
         # Update the registry and legacy parameters
         for key, value in self._parameters.items():
             self.set(key, value)
             self._parameters[key] = value  # NOTE: For backward compatibility
-                
-    def update_parameter(self, key, value) -> None:
-        """Update a parameter in both registry and legacy dictionary."""
-        self.set(key, value)
-        self._parameters[key] = value  # NOTE: For backward compatibility
-        
-    def list_parameters(self) -> pd.DataFrame:
-        """ Create a DataFrame from the ExperimentConfig properties """
-        properties = [prop for prop in dir(self.__class__) if isinstance(getattr(self.__class__, prop), property)]
-        exclude_properties = {'dataframe', 'parameters', 'json_path', "_cores", "meso_sequence", "pupil_sequence", "psychopy_path", "encoder"}
-        data = {prop: getattr(self, prop) for prop in properties if prop not in exclude_properties}
-        return pd.DataFrame(data.items(), columns=['Parameter', 'Value'])
-                
-    def save_wheel_encoder_data(self, data):
-        """ Save the wheel encoder data to a CSV file """
-        if isinstance(data, list):
-            data = pd.DataFrame(data)
-        encoder_path = self.make_path(suffix="encoder-data", extension="csv", bids_type='beh')
-        try:
-            data.to_csv(encoder_path, index=False)
-            print(f"Encoder data saved to {encoder_path}")        
-        except Exception as e:
-            print(f"Error saving encoder data: {e}")
-            
-    def save_configuration(self):
-        """ Save the configuration parameters from the registry to a CSV file """
-        params_path = self.make_path(suffix="configuration", extension="csv")
-        try:
-            # Get all parameters from the registry
-            registry_items = self.items()
-            params_df = pd.DataFrame(list(registry_items.items()), columns=['Parameter', 'Value'])
-            params_df.to_csv(params_path, index=False)
-            self.logger.info(f"Configuration saved to {params_path}")
-        except Exception as e:
-            self.logger.error(f"Error saving configuration: {e}")
-        
-        notes_path = self.make_path(suffix="notes", extension="txt")
-        try:
-            with open(notes_path, 'w') as f:
-                f.write('\n'.join(self.notes))
-                self.logger.info(f"Notes saved to {notes_path}")
-        except Exception as e:
-            self.logger.error(f"Error saving notes: {e}")
-    
-    def save_parameters(self, file_path=None):
-        """Save parameters to a file (JSON or YAML based on extension)."""
-        if file_path is None:
-            file_path = self._json_file_path
-            
-        if not file_path:
-            print("No file path specified for saving parameters")
-            return
-            
-        try: #to save combined registry and legacy parameters
-            combined_params = self.items()
-            combined_params.update(self._parameters)
-            with open(file_path, 'w') as f:
-                json.dump(combined_params, f, indent=2)
-        except Exception as e:
-            print(f"Error saving JSON: {e}")
-            print(f"Parameters saved to {file_path}")
-            
-    def get_parameter_metadata(self, key=None):
-        """Get metadata for a parameter or all parameters.
-        
-        Args:
-            key: Optional parameter key to get metadata for. If None, returns all metadata.
-            
-        Returns:
-            Dictionary of parameter metadata including type, description, and category.
-        """
-        if key is not None:
-            return self.get_metadata(key)
-        else:
-            # Return metadata for all parameters
-            return {k: self.get_metadata(k) for k in self.keys()}
-            
-    def get_parameters_by_category(self, category=None):
-        """Get parameters grouped by category.
-        
-        Args:
-            category: Optional category to filter by. If None, returns all categories.
-            
-        Returns:
-            Dictionary of parameters grouped by category.
-        """
-        result = {}
-        for key in self.keys():
-            meta = self.get_metadata(key)
-            cat = meta.get('category', 'general')
-            
-            if category is not None and cat != category:
-                continue
-                
-            if cat not in result:
-                result[cat] = {}
-                
-            result[cat][key] = {
-                'value': self.get(key),
-                'metadata': meta
-            }
-            
-        return result
+                    
         
     def register_parameter(self, key, default=None, type_hint=None, description="", category="general"):
         """Register a new parameter with metadata.
