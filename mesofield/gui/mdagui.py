@@ -15,7 +15,7 @@ from pymmcore_widgets import (
     SnapButton,
 )
 
-from mesofield.io.writer import CustomWriter
+from mesofield.data.writer import CustomWriter
 from mesofield.gui.viewer import ImagePreview, InteractivePreview
 
 class CustomMDAWidget(MDAWidget):

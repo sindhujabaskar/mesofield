@@ -3,8 +3,7 @@ from __future__ import annotations
 DataManager & DataSaver Workflow Overview
 1. Initialization
     ├─ dm = DataManager()
-    ├─ dm.set_config(config)      # attaches ExperimentConfig instance -> DataSaver(config)
-    └─ dm.set_database(path)      # attaches H5Database(path) instance
+    └─ dm.setup(config, path, devices)
 2. Optional data persistence via DataSaver
     ├─ dm.saver.save_config()         # writes experiment config to disk
     ├─ dm.saver.save_encoder_data(df) # writes encoder CSV + updates encoder.output_path
@@ -35,20 +34,23 @@ DataManager & DataSaver Workflow Overview
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Any, Dict, Iterable
+from logging import Logger
 
 import os
 import queue
 import csv
 import threading
 import time
+from datetime import datetime
 
 import pandas as pd
 
 from mesofield.config import ExperimentConfig
-from mesofield.io.writer import CustomWriter
+from mesofield.data.writer import CustomWriter
 from mesofield.io.h5db import H5Database
 from mesofield.io import sessiondb
+from mesofield.utils._logger import get_logger, log_this_fr
 
 
 @dataclass
@@ -94,33 +96,48 @@ class DataQueue:
 class DataSaver:
     """Helper to persist experiment metadata and outputs."""
 
-    config: ExperimentConfig
+    cfg: ExperimentConfig
+    logger: Logger = field(default_factory=lambda: get_logger("DataSaver"))
 
-    def save_config(self) -> None:
-        """Persist the configuration to disk."""
-        self.config.save_configuration()
+    def configuration(self, suffix: str = "configuration") -> None:
+        """Save the ExperimentConfig registry to a CSV file."""
+        
+        self.params_path = self.cfg.make_path(suffix="configuration", extension="csv")
+        try:
+            # Get all parameters from the registry
+            registry_items = self.cfg.items()
+            params_df = pd.DataFrame(list(registry_items.items()), columns=['Parameter', 'Value'])
+            params_df.to_csv(self.params_path, index=False)
+            self.logger.info(f"Configuration saved to {self.params_path}")
+        except Exception as e:
+            self.logger.error(f"Error saving configuration: {e}")
 
-    def save_encoder_data(self, df: Any) -> None:
-        """Write wheel encoder values as CSV."""
-        if isinstance(df, list):
-            df = pd.DataFrame(df)
-        path = self.config.make_path("encoder-data", "csv", "beh")
-        df.to_csv(path, index=False)
-        enc = self.config.hardware.get_encoder() if hasattr(self.config.hardware, "get_encoder") else None
-        if enc:
-            enc.output_path = path
+    def hardware(self) -> None:
+        """Call `save_data()` method for all hardware devices registered to the HardwareManager."""
+        #TODO: fetch all output and metadata path attributes from devices and store them in a dict attr of DataSaver
+        #self.device_output_paths = {}
+        for device in self.cfg.hardware.devices.values():
+            try:
+                device.save_data()
+            except Exception as e:
+                self.logger.error(f"Error saving device {device} state: {e}")
 
-    def save_notes(self) -> None:
+    def notes(self) -> None:
         """Persist user notes if present."""
-        if not self.config.notes:
+        if not self.cfg.notes:
             return
-        path = self.config.make_path("notes", "txt")
-        with open(path, "w") as fh:
-            fh.write("\n".join(self.config.notes))
+        self.notes_path = self.cfg.make_path("notes", "txt")
+        try:
+            with open(self.notes_path, 'w') as f:
+                f.write('\n'.join(self.cfg.notes))
+                self.logger.info(f"Notes saved to {self.notes_path}")
+        except Exception as e:
+            self.logger.error(f"Error saving notes: {e}")
 
+    #TODO: move this logic to the MMCamera class itself
     def writer_for(self, camera) -> CustomWriter:
         """Create an image writer for ``camera`` and store the output path."""
-        writer = CustomWriter(self.config.make_path(camera.name, "ome.tiff", "func"))
+        writer = CustomWriter(self.cfg.make_path(camera.name, "ome.tiff", "func"))
         camera.output_path = writer._filename
         camera.metadata_path = writer._frame_metadata_filename
         return writer
@@ -130,12 +147,11 @@ class DataManager:
     """Very small wrapper providing optional :class:`DataSaver`."""
 
     def __init__(self) -> None:
-        self.saver: Optional[DataSaver] = None
+        self.save: DataSaver
         self.database: Optional[H5Database] = None
-        self.data_queue = DataQueue()
+        self.queue = DataQueue()
         
         self.devices: List[Any] = []
-        self.device_map: Dict[str, Any] = {}
         
         self.queue_log_path: Optional[str] = None
         self.queue_packets: list[list[Any]] = []
@@ -146,31 +162,29 @@ class DataManager:
         self._writer: Optional[csv.writer] = None
         self._file: Optional[Any] = None
 
-
-    def set_config(self, config: ExperimentConfig) -> None:
-        """Attach configuration so data can be saved."""
-        self.saver = DataSaver(config)
-
-    def set_database(self, path: str) -> None:
-        """Attach an :class:`H5Database` for appending session data."""
+    @log_this_fr
+    def setup(self, config: ExperimentConfig, path: str, devices: Iterable[Any]) -> None:
+        """Attach configuration, database, and register devices."""
+        self.save = DataSaver(config)
         self.database = H5Database(path)
+        self.register_devices(devices)
+
+    def register_devices(self, devices: Iterable[Any]) -> None:
+        """Register a list of hardware devices with the manager."""
+        for dev in devices:
+            if hasattr(dev, "device_type") and hasattr(dev, "get_data"):
+                self.register_hardware_device(dev)
 
     def append_to_database(self, df: pd.DataFrame, key: str = "data") -> None:
         """Append ``df`` to the database if configured."""
         if self.database:
             self.database.update(df, key)
 
-    def read_database(self, key: str = "data") -> Optional[pd.DataFrame]:
-        """Return a DataFrame from the database if configured."""
-        if self.database:
-            return self.database.read(key)
-        return None
-
     # ------------------------------------------------------------------
     def start_queue_logger(self, path: str | None = None, *, stream: bool = True) -> None:
         """Begin capturing :class:`DataQueue` contents."""
-        if path is None and self.saver:
-            path = self.saver.config.make_path("dataqueue", "csv", "beh")
+        if path is None and self.save:
+            path = self.save.cfg.make_path("dataqueue", "csv", "beh")
         if path is None:
             return
 
@@ -223,11 +237,10 @@ class DataManager:
         self._writer = None
 
     def _queue_writer_loop(self) -> None:
-        from datetime import datetime
 
-        while not self._stop_queue or not self.data_queue.empty():
+        while not self._stop_queue or not self.queue.empty():
             try:
-                pkt = self.data_queue.pop(timeout=0.1)
+                pkt = self.queue.pop(timeout=0.1)
             except queue.Empty:
                 continue
 
@@ -247,24 +260,14 @@ class DataManager:
         # Try to connect various callback styles to push data to our queue
         def _push(payload: Any, device_ts: Any = None, *, dev=device) -> None:
             dev_id = getattr(dev, "device_id", getattr(dev, "id", "unknown"))
-            self.data_queue.push(dev_id, payload, device_ts=device_ts)
+            #print(f"DataManager: Pushing data from {dev_id} to queue: {payload}")
+            self.queue.push(dev_id, payload, device_ts=device_ts)
 
         # Connect using a standard data_event if present
         evt = getattr(device, "data_event", None)
         if evt is not None and hasattr(evt, "connect"):
             try:
                 evt.connect(_push)
-            except Exception:
-                pass
-
-        if hasattr(device, "data_callback"):
-            try:
-                device.data_callback = _push  # type: ignore[assignment]
-            except Exception:
-                pass
-        if hasattr(device, "set_data_callback"):
-            try:
-                device.set_data_callback(_push)  # type: ignore[attr-defined]
             except Exception:
                 pass
             
@@ -284,7 +287,8 @@ class DataManager:
                     sig.connect(lambda _img, event, metadata: _push(metadata['camera_metadata']['TimeReceivedByCore']))
                 except Exception:
                     pass
-
+                
+    #TODO: move this logic to DataSaver
     def get_device_outputs(self, subject: str, session: str) -> pd.DataFrame:
         """Return a DataFrame of output file paths for registered devices."""
         records = {}
@@ -313,10 +317,10 @@ class DataManager:
     # ------------------------------------------------------------------
     def update_database(self) -> None:
         """Gather session outputs and append them to the HDF5 database."""
-        if not (self.database and self.saver):
+        if not (self.database and self.save):
             return
 
-        cfg = self.saver.config
+        cfg = self.save.cfg
         subject, session = cfg.subject, cfg.session
 
         try:

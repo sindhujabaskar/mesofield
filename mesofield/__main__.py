@@ -14,12 +14,12 @@ os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
 logging.getLogger("ipykernel.inprocess.ipkernel").setLevel(logging.WARNING)
 
 def get_experimental_summary(experiment_dir):
-    import mesofield.data.load as load
+    import mesofield.data.proc.load as load
     datadict =  load.file_hierarchy(experiment_dir)
     load.experiment_progress_summary(datadict)
 
 def get_file_hierarchy_object(experiment_dir):
-    import mesofield.data.load as load
+    import mesofield.data.proc.load as load
     return load.file_hierarchy(experiment_dir)
 
 
@@ -93,7 +93,7 @@ def launch(params, procedure_config, experiment_id, experimentor):
 @click.option('--sub', help='Subject ID (the name of the subject folder)')
 def trace_meso(experiment_dir, subject_id):
     import pandas as pd
-    import mesofield.data.load as load
+    import mesofield.data.proc.load as load
     import mesofield.data.batch as batch
     
     datadict =  load.file_hierarchy(experiment_dir)
@@ -157,7 +157,7 @@ def get_fps(params):
     frame_metadata: FrameMetaV1 = None
     
     config = ExperimentConfig(params)
-    config.hardware._configure_engines(config)
+    config.hardware.initialize(config)
 
     # measure over a fixed number of frames to get fps
     num_frames = 300
