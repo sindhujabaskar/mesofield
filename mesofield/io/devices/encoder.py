@@ -52,6 +52,8 @@ class SerialWorker(QThread):
     # Hardware device interface properties
     device_id: str  # Unique identifier for this device
     device_type: ClassVar[str] = "encoder"
+    file_type: str = "csv"
+    bids_type: Optional[str] = "beh"
     data_rate: float = 0.0  # Will be calculated from sample_interval_ms
     _started: datetime  # Time when the device started recording
     _stopped: datetime  # Time when the device stopped recording
@@ -118,10 +120,11 @@ class SerialWorker(QThread):
         self.clicks = []
         self.start_time = None
 
-    def start_recording(self, file_path: Optional[str] = None) -> None:
-        self.output_path = file_path
+
+    def start_recording(self) -> None:
         self.serialStreamStarted.emit()
         self.start()
+
 
     def start(self):
         return super().start()
@@ -264,16 +267,13 @@ class SerialWorker(QThread):
         self.speeds = []
         self.start_time = time.time()
     
-    def save_data(self):
-        """Save the recorded data to a file if output_path is set."""
-        if not self.output_path:
-            self.logger.warning("No output path specified for saving data.")
-            return
-        
+    def save_data(self, path: str):
+        """Save the recorded data to a file."""
+        self.output_path = path
         try:
             df = self.get_data()
             df.to_csv(self.output_path, index=False)
-            self.logger.info(f"Data saved to {self.output_path}")
+            self.logger.debug(f"Data saved to {self.output_path}")
         except Exception as e:
             self.logger.error(f"Failed to save data: {e}")
 

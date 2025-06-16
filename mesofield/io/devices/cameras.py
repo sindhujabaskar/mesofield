@@ -16,9 +16,11 @@ from mesofield.utils._logger import get_logger
 #TODO start and stop time in start and stop methods
 @DeviceRegistry.register("camera")
 class MMCamera(DataProducer, HardwareDevice):
-    
+
     device_type = "camera"
     sampling_rate: float = 30.0  # Default sampling rate in Hz
+    file_type: str = "ome.tiff"
+    bids_type: Optional[str] = "func"
     output_path: Optional[str] = None
     metadata_path: Optional[str] = None
     

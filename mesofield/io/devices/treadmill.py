@@ -60,6 +60,8 @@ class EncoderSerialInterface(QThread):
     serialStreamStopped = pyqtSignal()         # Emits when streaming stops
     serialSpeedUpdated = pyqtSignal(float, float)  # Emits elapsed time and current speed
     device_id: str = "treadmill"  # Default device ID, can be overridden
+    file_type: str = "csv"
+    bids_type: Optional[str] = "beh"
     _started: datetime  # Timestamp when the interface started
     _stopped: datetime # Timestamp when the interface stopped
     
@@ -130,11 +132,13 @@ class EncoderSerialInterface(QThread):
                 self.logger.error(f"Unexpected error: {ex}")
         self.logger.info(f"Exiting serial read loop.")
 
-    def save_data(self):
+    def save_data(self, path: Optional[str] = None):
         """
         Save the recorded data to a CSV file.
         This method is called when recording is stopped.
         """
+        if path:
+            self.output_path = path
         if not self.session_data:
             self.logger.warning("No data recorded to save.")
             return

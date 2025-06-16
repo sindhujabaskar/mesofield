@@ -6,6 +6,9 @@ nidaq:
   lines: "port1/line0"
   ctr: "ctr0"
   io_type: "DO"
+  output:
+    suffix: "nidaq"
+    file_type: "csv"
   widgets:
     - "nidaq_test"
 
@@ -17,12 +20,20 @@ encoder:
   diameter_mm: 80
   sample_interval_ms: 20
   development_mode: True
+  output:
+    suffix: "wheel"
+    file_type: "csv"
+    bids_type: "beh"
 
 cameras:
   - id: "dev"
     name: "devcam1"
     backend: "micromanager"
     micromanager_path: "C:/Program Files/Micro-Manager-2.0"
+    output:
+      suffix: "devcam1"
+      file_type: "ome.tiff"
+      bids_type: "func"
     viewer_type: "static"
     properties:
       fps: 30

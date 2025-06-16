@@ -42,18 +42,13 @@ class Nidaq:
     io_type: str
     device_type: ClassVar[str] = "nidaq"
     device_id: str = "nidaq"
-    config: Dict[str, Any] = None
+    bids_type: str = ""
+    file_type: str = "csv"
 
     def __post_init__(self):
         self._started: datetime # Timestamp when the device was started
         self._stopped: datetime # Timestamp when the device was stopped
         self.data_event = Event()
-        if self.config is None:
-            self.config = {
-                "device_name": self.device_name,
-                "lines": self.lines,
-                "io_type": self.io_type
-            }
         self.logger = get_logger(f"{__name__}.{self.__class__.__name__}[{self.device_id}]")
         self.pulse_width = 0.001
         self.poll_interval = 0.01

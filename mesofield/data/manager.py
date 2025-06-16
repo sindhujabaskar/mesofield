@@ -51,6 +51,8 @@ from mesofield.data.writer import CustomWriter
 from mesofield.io.h5db import H5Database
 from mesofield.io import sessiondb
 from mesofield.utils._logger import get_logger, log_this_fr
+from typing import Dict
+from mesofield.utils._logger import get_logger
 
 
 @dataclass
@@ -65,7 +67,11 @@ class DataPacket:
 
 
 class DataQueue:
-    """Thread-safe queue for data streaming between devices and consumers."""
+    """Thread-safe queue for data streaming between devices and consumers.
+    
+    Registered DataProducer (the :class:`DataManager`) devices can push data packets to this queue,
+    which can then be consumed by other parts of the system.
+    """
 
     def __init__(self, maxsize: int = 0) -> None:
         self._queue: queue.Queue[DataPacket] = queue.Queue(maxsize)
@@ -93,58 +99,149 @@ class DataQueue:
 
 
 @dataclass
-class DataSaver:
-    """Helper to persist experiment metadata and outputs."""
+class DataPaths:
+    """Structured storage for all output paths used by the :class:`DataSaver`.
+    
+    Relies on the :class:`ExperimentConfig` to generate paths based on the
+    experiment's BIDS directory using the `make_path` method, which relies
+    on HardwareDevices implementing a file_type, bids_type.
+    
+    These paths can then be passed to HardwareDevice.save_data(path)  
+    """
+    configuration: str
+    notes: str
+    timestamps: str
+    hardware: Dict[str, str] = field(default_factory=dict)
+    writers: Dict[str, str] = field(default_factory=dict)
+    queue: str = ""
 
+    @classmethod
+    def build(cls, cfg: ExperimentConfig) -> DataPaths:
+        cfg_paths = {
+            "configuration": cfg.make_path("configuration", "csv"),
+            "notes": cfg.make_path("notes", "txt"),
+            "timestamps": cfg.make_path("timestamps", "csv"),
+        }
+        hw_paths: Dict[str, str] = {}
+        for dev_id, device in cfg.hardware.devices.items():
+            args = getattr(device, "path_args", {})
+            suffix = args.get("suffix", dev_id)
+            ext = args.get("extension", getattr(device, "file_type", "dat"))
+            bids_type = args.get("bids_type", getattr(device, "bids_type"))
+            hw_paths[dev_id] = cfg.make_path(suffix, ext, bids_type)
+        return cls(
+            configuration=cfg_paths["configuration"],
+            notes=cfg_paths["notes"],
+            timestamps=cfg_paths["timestamps"],
+            hardware=hw_paths,
+            writers={},
+            queue=cfg.make_path("dataqueue", "csv", "beh"),
+        )
+
+@dataclass
+class DataSaver:
+    """Helper class for saving experiment data to disk.
+    
+    This class handles saving configuration, hardware data, notes, timestamps,
+    and camera data to disk.
+    
+    Takes paths generated from :class:`DataPaths` instance and calls `Device.save_data(path)`
+    on all hardware devices that implement this method.
+    
+    (NOTE: If a device does not implement `save_data`, it will be skipped.)
+    
+    Takes an :class:`ExperimentConfig` to save configuration.
+    """
+    
     cfg: ExperimentConfig
+    paths: DataPaths = field(init=False)
     logger: Logger = field(default_factory=lambda: get_logger("DataSaver"))
 
-    def __post_init__(self) -> None:  # pragma: no cover - logging only
-        from mesofield.utils import _logger
-        self.logger.info(f"Logging directory: {_logger._log_dir}")
+    def __post_init__(self) -> None:
+        self.paths = DataPaths.build(self.cfg)
+        self.logger.info(f"Prepared output paths: {self.paths}")
 
-    def configuration(self, suffix: str = "configuration") -> None:
-        """Save the ExperimentConfig registry to a CSV file."""
-        
-        self.params_path = self.cfg.make_path(suffix="configuration", extension="csv")
+    def configuration(self) -> None:
+        path = self.paths.configuration
         try:
-            # Get all parameters from the registry
-            registry_items = self.cfg.items()
-            params_df = pd.DataFrame(list(registry_items.items()), columns=['Parameter', 'Value'])
-            params_df.to_csv(self.params_path, index=False)
-            self.logger.info(f"Configuration saved to {self.params_path}")
-        except Exception:
-            self.logger.exception("Error saving configuration")
+            params = self.cfg.items()
+            df = pd.DataFrame(params.items(), columns=["Parameter", "Value"])
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            df.to_csv(path, index=False)
+            self.logger.info(f"Configuration saved to {path}")
+        except Exception as e:
+            self.logger.error(f"Error saving configuration: {e}")
 
-    def hardware(self) -> None:
-        """Call `save_data()` method for all hardware devices registered to the HardwareManager."""
-        #TODO: fetch all output and metadata path attributes from devices and store them in a dict attr of DataSaver
-        #self.device_output_paths = {}
-        for device in self.cfg.hardware.devices.values():
+    def all_hardware(self) -> None:
+        for dev_id, path in self.paths.hardware.items():
+            device = self.cfg.hardware.devices.get(dev_id)
+            if not device:
+                continue
             try:
-                device.save_data()
-            except Exception:
-                self.logger.exception(f"Error saving device {device} state")
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                device.output_path = path
+                if hasattr(device, "save_data"):
+                    device.save_data(path)
+                self.logger.info(f"Device {dev_id} data saved to {path}")
+            except Exception as e:
+                self.logger.error(f"Error saving device {dev_id}: {e}")
 
-    def notes(self) -> None:
-        """Persist user notes if present."""
+    def all_notes(self) -> None:
         if not self.cfg.notes:
             return
-        self.notes_path = self.cfg.make_path("notes", "txt")
+        path = self.paths.notes
         try:
-            with open(self.notes_path, 'w') as f:
-                f.write('\n'.join(self.cfg.notes))
-                self.logger.info(f"Notes saved to {self.notes_path}")
-        except Exception:
-            self.logger.exception("Error saving notes")
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write("\n".join(self.cfg.notes))
+            self.logger.info(f"Notes saved to {path}")
+        except Exception as e:
+            self.logger.error(f"Error saving notes: {e}")
 
-    #TODO: move this logic to the MMCamera class itself
+    def save_timestamps(self, id, start_time, stop_time) -> None:
+        path = self.paths.timestamps
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(["device_id", "started", "stopped"])
+                writer.writerow([id, start_time, stop_time])
+                for dev_id, device in self.cfg.hardware.devices.items():
+                    started = getattr(device, "_started", "")
+                    stopped = getattr(device, "_stopped", "")
+                    writer.writerow([dev_id, started, stopped])
+            self.logger.info(f"Timestamps saved to {path}")
+        except Exception as e:
+            self.logger.error(f"Error saving timestamps: {e}")
+
     def writer_for(self, camera) -> CustomWriter:
-        """Create an image writer for ``camera`` and store the output path."""
-        writer = CustomWriter(self.cfg.make_path(camera.name, "ome.tiff", "func"))
+        path = self.cfg.make_path(camera.name, "ome.tiff", "func")
+        self.paths.writers[camera.name] = path
+        writer = CustomWriter(path)
         camera.output_path = writer._filename
         camera.metadata_path = writer._frame_metadata_filename
+        self.logger.info(f"Writer for {camera.name} set to {path}")
         return writer
+    
+    def save_queue(self, rows: list[list[Any]], path: str | None = None) -> None:
+        """Save queued data rows to CSV file specified in DataPaths or override path."""
+        if path is None:
+            path = self.paths.queue
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow([
+                    "datetime",
+                    "timestamp",
+                    "device_ts",
+                    "device_id",
+                    "payload",
+                ])
+                writer.writerows(rows)
+            self.logger.info(f"Queue log saved to {path}")
+        except Exception as e:
+            self.logger.error(f"Error saving queue log: {e}")
 
 
 class DataManager:
@@ -154,7 +251,11 @@ class DataManager:
         self.save: DataSaver
         self.database: Optional[H5Database] = None
         self.queue = DataQueue()
-        
+
+        # backwards compatibility
+        self.data_queue = self.queue
+        self.saver = None
+
         self.devices: List[Any] = []
         
         self.queue_log_path: Optional[str] = None
@@ -162,14 +263,19 @@ class DataManager:
         
         self._queue_thread: Optional[threading.Thread] = None
         self._stop_queue: bool = False
-        self._stream: bool = False
-        self._writer: Optional[csv.writer] = None
-        self._file: Optional[Any] = None
+
+    # backwards compatibility for tests
+    def set_config(self, config: ExperimentConfig) -> None:
+        self.save = DataSaver(config)
+        self.saver = self.save
+        self.database = None
+
 
     @log_this_fr
     def setup(self, config: ExperimentConfig, path: str, devices: Iterable[Any]) -> None:
         """Attach configuration, database, and register devices."""
         self.save = DataSaver(config)
+        self.saver = self.save
         self.database = H5Database(path)
         self.register_devices(devices)
 
@@ -185,33 +291,24 @@ class DataManager:
             self.database.update(df, key)
 
     # ------------------------------------------------------------------
-    def start_queue_logger(self, path: str | None = None, *, stream: bool = True) -> None:
+    def start_queue_logger(self, path: str | None = None) -> None:
         """Begin capturing :class:`DataQueue` contents."""
+        # determine log path, default to DataPaths.queue
         if path is None and self.save:
-            path = self.save.cfg.make_path("dataqueue", "csv", "beh")
+            path = self.save.paths.queue
         if path is None:
             return
 
         self.queue_log_path = path
+        # in-memory storage for log rows
         self.queue_packets = []
-        self._stream = stream
         self._stop_queue = False
 
-        if self._stream:
-            self._file = open(path, "w", newline="")
-            self._writer = csv.writer(self._file)
-            self._writer.writerow([
-                "datetime",
-                "timestamp",
-                "device_ts",
-                "device_id",
-                "payload",
-            ])
-        else:
-            self._file = None
-            self._writer = None
-
-        self._queue_thread = threading.Thread(target=self._queue_writer_loop, daemon=True)
+        # start background thread to record queue packets
+        self._queue_thread = threading.Thread(
+            target=self._queue_writer_loop,
+            daemon=True,
+        )
         self._queue_thread.start()
 
     def stop_queue_logger(self) -> None:
@@ -220,25 +317,10 @@ class DataManager:
         if self._queue_thread:
             self._queue_thread.join(timeout=1)
 
-        if not self._stream and self.queue_log_path:
-            with open(self.queue_log_path, "w", newline="") as fh:
-                writer = csv.writer(fh)
-                writer.writerow([
-                    "datetime",
-                    "timestamp",
-                    "device_ts",
-                    "device_id",
-                    "payload",
-                ])
-                writer.writerows(self.queue_packets)
-
-        if self._file:
-            try:
-                self._file.close()
-            except Exception:
-                pass
-        self._file = None
-        self._writer = None
+        # save recorded packets via DataSaver
+        if self.save and self.queue_log_path:
+            # use the configured log path for writing
+            self.save.save_queue(self.queue_packets, self.queue_log_path)
 
     def _queue_writer_loop(self) -> None:
 
@@ -252,10 +334,10 @@ class DataManager:
             row = [now, pkt.timestamp, pkt.device_ts, pkt.device_id, pkt.payload]
             self.queue_packets.append(row)
 
-            if self._stream and self._writer:
-                self._writer.writerow(row)
-                assert self._file is not None
-                self._file.flush()
+            # if self._stream and self._writer:
+            #     self._writer.writerow(row)
+            #     assert self._file is not None
+            #     self._file.flush()
 
     def register_hardware_device(self, device: Any) -> None:  # pragma: no cover - convenience
         """Track a hardware device and connect its data stream to the queue."""

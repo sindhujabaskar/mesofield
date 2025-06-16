@@ -72,7 +72,10 @@ class Procedure:
 
         if not os.path.exists(self.data_dir):
             os.makedirs(self.data_dir, exist_ok=True)
-        self._config.save_dir = self.data_dir
+        root = self.data_dir
+        if os.path.basename(root) == "data":
+            root = os.path.dirname(root)
+        self._config.save_dir = root
 
         self.logger = get_logger(f"PROCEDURE.{self.experiment_id}")
         self.logger.info(f"Initialized procedure: {self.experiment_id}")
@@ -104,7 +107,8 @@ class Procedure:
         The `DataManager` singleton is initialized here, too, as an attribute of the `Procedure` instance. 
         """
         try:
-            self._config.hardware.initialize(self._config)
+            if hasattr(self._config.hardware, "initialize"):
+                self._config.hardware.initialize(self._config)
 
             self.data = DataManager()
             self.data.setup(
@@ -129,20 +133,12 @@ class Procedure:
     # ------------------------------------------------------------------
     def run(self) -> None:
         """Run the standard Mesofield workflow."""
-        self.logger.info("Starting experiment")
+        self.logger.info("================= Starting experiment ===================")
         self.data.start_queue_logger()
         try:
             recorders = []
             for cam in self.hardware.cameras:
-                writer = (
-                    self.data.save.writer_for(cam)
-                    if self.data.save
-                    else CustomWriter(self._config.make_path(cam.name, "ome.tiff", bids_type="func"))
-                )
-                if not hasattr(cam, "output_path"):
-                    # ensure path attributes even when writer created directly
-                    cam.output_path = writer._filename
-                    cam.metadata_path = writer._frame_metadata_filename
+                writer = self.data.save.writer_for(cam)
                 recorders.append((cam.core, self._config.build_sequence(cam), writer))
                 
             self.hardware.cameras[0].core.mda.events.sequenceFinished.connect(self._cleanup_procedure)
@@ -152,7 +148,7 @@ class Procedure:
                 self.psychopy_process.start()
 
             self.start_time = datetime.now()
-            self.start_encoder()
+            self.hardware.encoder.start_recording()
             for mmc, sequence, writer in recorders:
                 mmc.run_mda(sequence, output=writer, block=False)
         except Exception as e:  # pragma: no cover - hardware errors
@@ -161,26 +157,14 @@ class Procedure:
 
     # ------------------------------------------------------------------
     def save_data(self) -> None:
+        mgr = getattr(self, "data_manager", self.data)
 
-        self.data.save.configuration()
-        self.data.save.notes()
-        self.data.save.hardware()
-        self.save_timestamps()
+        mgr.save.configuration()
+        mgr.save.all_notes()
+        mgr.save.all_hardware()
+        mgr.save.save_timestamps(self.experiment_id, self.start_time, self.stopped_time)
         self.logger.info("Data saved successfully")
 
-    def save_timestamps(self):
-        """Save timestamps of the experiment and hardware devices."""
-        import csv
-        
-        timestamps_path = os.path.join(self._config.bids_dir, "timestamps.csv")
-        with open(timestamps_path, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(["device_id", "started", "stopped"])
-            writer.writerow([self.experiment_id, self.start_time, self.stopped_time])
-            for device_id, device in self.hardware.devices.items():
-                started = getattr(device, "_started", "")
-                stopped = getattr(device, "_stopped", "")
-                writer.writerow([device_id, started, stopped])
 
     # ------------------------------------------------------------------
     def _launch_psychopy(self):
@@ -191,7 +175,7 @@ class Procedure:
     def _cleanup_procedure(self):
         self.logger.info("Cleanup Procedure")
         try:
-            self.hardware.cameras[1].core.stopSequenceAcquisition()
+            #self.hardware.cameras[1].core.stopSequenceAcquisition()
             self.hardware.cameras[0].core.mda.events.sequenceFinished.disconnect(self._cleanup_procedure)
             self.hardware.stop()
             self.data.stop_queue_logger()
@@ -203,21 +187,6 @@ class Procedure:
             self.logger.error(f"Error during cleanup: {e}")
 
     # ------------------------------------------------------------------
-
-
-    def start_encoder(self) -> bool:
-        try:
-            encoder = self.hardware.get_encoder()
-            if encoder and hasattr(encoder, "start_recording"):
-                path = self._config.make_path("encoder-data", "csv", "beh")
-                encoder.output_path = path
-                encoder.start_recording(path)
-                return True
-            return False
-        except Exception as e:
-            self.logger.error(f"Failed to start encoder: {e}")
-            return False
-
 
     def add_note(self, note: str) -> None:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

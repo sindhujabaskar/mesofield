@@ -156,9 +156,11 @@ class HardwareDevice(Protocol):
 @runtime_checkable
 class DataProducer(HardwareDevice, Protocol):
     """Protocol defining the interface for data-producing components."""
-    
+
     sampling_rate: float  # in Hz
     data_type: str
+    file_type: str
+    bids_type: Optional[str] = None
     is_active: bool
     output_path: str
     metadata_path: Optional[str] = None
