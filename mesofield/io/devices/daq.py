@@ -72,7 +72,12 @@ class Nidaq:
             self.logger.info("NI-DAQ connection successful")
         except nidaqmx.DaqError as e:
             self.logger.error(f"NI-DAQ connection failed: {e}")
-
+            
+    def reset(self):
+        self.logger.info(f"Resetting NIDAQ device")
+        if self._thread and self._thread.is_alive():
+            self.stop()
+        nidaqmx.system.Device(self.device_name).reset_device()
 
     def start(self):
         # Configure and start the CI task
