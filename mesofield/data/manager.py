@@ -261,7 +261,7 @@ class DataManager:
 
     def __init__(self) -> None:
         self.save: DataSaver
-        self.database: Optional[H5Database] = None
+        self.base: Optional[H5Database] = None
         self.queue = DataQueue()
 
         # backwards compatibility

@@ -67,20 +67,13 @@ class Procedure:
         self._config.set("data_dir", self.data_dir)
         self._config.set("h5_path", self.h5_path)
 
-        if procedure_config.json_config:
-            self.setup_configuration(procedure_config.json_config)
-
-        if not os.path.exists(self.data_dir):
-            os.makedirs(self.data_dir, exist_ok=True)
-        root = self.data_dir
-        if os.path.basename(root) == "data":
-            root = os.path.dirname(root)
-        self._config.save_dir = root
 
         self.logger = get_logger(f"PROCEDURE.{self.experiment_id}")
         self.logger.info(f"Initialized procedure: {self.experiment_id}")
         self.initialize_hardware()
-
+        
+        if procedure_config.json_config:
+            self.setup_configuration(procedure_config.json_config)
     # ------------------------------------------------------------------
     # Convenience accessors
     @property
@@ -117,18 +110,31 @@ class Procedure:
                 self._config.hardware.devices.values(),
             )
             self.logger.info("Hardware initialized successfully")
-            if hasattr(self.events.hardware_initialized, "emit"):
-                self.events.hardware_initialized.emit(True)
+            
         except RuntimeError as e:  # pragma: no cover - initialization failures
             self.logger.error(f"Failed to initialize hardware: {e}")
-            if hasattr(self.events.hardware_initialized, "emit"):
-                self.events.hardware_initialized.emit(False)
-
+            
     # ------------------------------------------------------------------
+    #TODO: Connect an update event from the GUI controller with this method
     def setup_configuration(self, json_config: Optional[str]) -> None:
+        """ This method loads ExperimentConfig instance with a JSON configuration file.
+        
+        It then sends this ExperimentConfig object to the HardwareManager, relaying it to MicroManager mda engines
+        
+        NOTE: This method is called by the ConfigController in the GUI whenever a json configuration file is picked,
+        thus, it is necessary to call the Procedure.DataManager.setup() method to ensure that the data manager
+        is aware of the new configuration and can set up the data storage accordingly.
+        """
         if json_config:
             self._config.load_json(json_config)
             self._config.hardware._configure_engines(self._config)
+        
+        self.data.setup(
+                self._config,
+                self.h5_path,
+                self._config.hardware.devices.values(),
+            )
+        
 
     # ------------------------------------------------------------------
     def run(self) -> None:
@@ -163,6 +169,7 @@ class Procedure:
         mgr.save.all_notes()
         mgr.save.all_hardware()
         mgr.save.save_timestamps(self.experiment_id, self.start_time, self.stopped_time)
+        mgr.update_database()
         self.logger.info("Data saved successfully")
 
 
