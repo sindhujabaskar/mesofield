@@ -64,9 +64,6 @@ class Procedure:
 
         self._config.set("experiment_id", self.experiment_id)
         self._config.set("experimentor", self.experimentor)
-        self._config.set("data_dir", self.data_dir)
-        self._config.set("h5_path", self.h5_path)
-
 
         self.logger = get_logger(f"PROCEDURE.{self.experiment_id}")
         self.logger.info(f"Initialized procedure: {self.experiment_id}")
@@ -131,7 +128,7 @@ class Procedure:
         
         self.data.setup(
                 self._config,
-                self.h5_path,
+                os.path.join(self._config.save_dir, f"{self.experiment_id}.h5"),
                 self._config.hardware.devices.values(),
             )
         
@@ -200,7 +197,7 @@ class Procedure:
         self._config.notes.append(f"{timestamp}: {note}")
         self.logger.info(f"Added note: {note}")
 
-    def load_database(self, key: str = "data"):
+    def load_database(self, key: str = "datapaths"):
         """Return a DataFrame with all sessions stored for this Procedure."""
         if hasattr(self, "data_manager"):
             return self.data.read_database(key)
