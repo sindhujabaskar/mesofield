@@ -54,7 +54,7 @@ class H5Database:
     def to_dataframe(self) -> pd.DataFrame:
         """
         Read every key in the store into a single pandas DataFrame with a
-        MultiIndex: outer level is the HDF5 key, inner level is the original index.
+        MultiIndex: level 0 = Sub, level 1 = Ses, level 2 = Task
         """
         if not self.path.exists():
             return pd.DataFrame()
@@ -69,8 +69,5 @@ class H5Database:
                     obj = obj.to_frame()
                 frames[key] = obj
 
-        # keys argument creates an outer index level with names
-        return pd.concat(
-            frames,
-            names=["key", *([] if frames[next(iter(frames))].index.nlevels == 1 else ["lvl" + str(i) for i in range(frames[next(iter(frames))].index.nlevels)])]
-        )
+        # name level 0 'Sub', level 1 'Ses', level 2 'Task'
+        return pd.concat(frames, names=["Sub", "Ses", "Task"])

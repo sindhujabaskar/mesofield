@@ -4,33 +4,14 @@ DataManager & DataSaver Workflow Overview
 1. Initialization
     ├─ dm = DataManager()
     └─ dm.setup(config, path, devices)
-2. Optional data persistence via DataSaver
-    ├─ dm.saver.save_config()         # writes experiment config to disk
-    ├─ dm.saver.save_encoder_data(df) # writes encoder CSV + updates encoder.output_path
-    ├─ dm.saver.save_notes()          # writes notes.txt if any
-    └─ dm.saver.writer_for(camera)    # returns `CustomWriter`, sets camera.output_path & metadata_path
+2. Saving experiment outputs via DataSaver
+    ├─ dm.saver.configuration()       # writes experiment config to disk
+    ├─ dm.saver.all_hardware()        # writes hardware outputs
+    ├─ dm.saver.all_notes()           # writes notes.txt if any
+    └─ dm.saver.writer_for(camera)    # returns writer & updates camera output paths
 3. Final database update: dm.update_database()
-    update_database()
-    ├─ camera data
-    │   └─ sessiondb.camera_dataframe(cameras, subject, session)
-    │       └─ dm.append_to_database(df, key="camera_data")
-    ├─ encoder data
-    │   └─ sessiondb.encoder_dataframe(encoder, subject, session)
-    │       └─ dm.append_to_database(df, key="encoder")
-    ├─ device files
-    │   └─ dm.get_device_outputs(subject, session)
-    │       └─ dm.append_to_database(df, key="device_files")
-    ├─ notes
-    │   └─ sessiondb.notes_dataframe(notes, subject, session)
-    │       └─ dm.append_to_database(df, key="notes")
-    ├─ timestamps
-    │   └─ sessiondb.timestamps_dataframe(bids_dir, subject, session)
-    │       └─ dm.append_to_database(df, key="timestamps")
-    └─ config snapshot
-         └─ sessiondb.config_dataframe(config)
-              └─ dm.append_to_database(df, key="config")
-              
-• Each block is wrapped in try/except to log errors and continue remaining steps.
+    update_database() records the :class:`DataPaths` for the current configuration
+    into the HDF5 database using a MultiIndex of (Subject, Session, Task).
 """
 
 from dataclasses import dataclass, field
@@ -49,10 +30,8 @@ import pandas as pd
 from mesofield.config import ExperimentConfig
 from mesofield.data.writer import CustomWriter, CV2Writer
 from mesofield.io.h5db import H5Database
-from mesofield.io import sessiondb
 from mesofield.utils._logger import get_logger, log_this_fr
 from typing import Dict
-from mesofield.utils._logger import get_logger
 
 
 @dataclass
@@ -261,7 +240,7 @@ class DataManager:
 
     def __init__(self) -> None:
         self.save: DataSaver
-        self.base: Optional[H5Database] = None
+        self.database: Optional[H5Database] = None
         self.queue = DataQueue()
 
         # backwards compatibility
@@ -306,7 +285,7 @@ class DataManager:
     def start_queue_logger(self, path: str | None = None) -> None:
         """Begin capturing :class:`DataQueue` contents."""
         # determine log path, default to DataPaths.queue
-        if path is None and self.save:
+        if path is None and getattr(self, "save", None):
             path = self.save.paths.queue
         if path is None:
             return
@@ -414,60 +393,37 @@ class DataManager:
 
     # ------------------------------------------------------------------
     def update_database(self) -> None:
-        """Gather session outputs and append them to the HDF5 database."""
+        """Record the current :class:`DataPaths` into the HDF5 database."""
         if not (self.database and self.save):
             return
 
         cfg = self.save.cfg
-        subject, session = cfg.subject, cfg.session
+        subject, session, task = cfg.subject, cfg.session, getattr(cfg, "task", "")
 
-        try:
-            cam_df = sessiondb.camera_dataframe(cfg.hardware.cameras, subject, session)
-            if not cam_df.empty:
-                self.append_to_database(cam_df, key="camera_data")
-        except Exception:  # pragma: no cover - optional
-            cfg.logger.exception("Database update failed while storing camera data")
+        # build single row dataframe with output paths
+        records: dict[str, str] = {
+            "configuration": self.save.paths.configuration,
+            "notes": self.save.paths.notes,
+            "timestamps": self.save.paths.timestamps,
+            "queue": self.queue_log_path or self.save.paths.queue,
+        }
 
-        try:
-            encoder = cfg.hardware.get_encoder()
-            enc_df = sessiondb.encoder_dataframe(encoder, subject, session)
-            if not enc_df.empty:
-                self.append_to_database(enc_df, key="encoder")
-        except Exception:  # pragma: no cover - optional
-            cfg.logger.exception("Database update failed while storing encoder data")
+        for dev_id, path in self.save.paths.hardware.items():
+            records[dev_id] = path
 
-        try:
-            dev_df = self.get_device_outputs(subject, session)
-            if not dev_df.empty:
-                self.append_to_database(dev_df, key="device_files")
-        except Exception:  # pragma: no cover - optional
-            cfg.logger.exception("Database update failed while storing device outputs")
+        for name, path in self.save.paths.writers.items():
+            records[name] = path
 
-        try:
-            notes_df = sessiondb.notes_dataframe(cfg.notes, subject, session)
-            if not notes_df.empty:
-                self.append_to_database(notes_df, key="notes")
-        except Exception:  # pragma: no cover - optional
-            cfg.logger.exception("Database update failed while storing notes")
+        idx = pd.MultiIndex.from_arrays(
+            [[subject], [session], [task]],
+            names=["Subject", "Session", "Task"],
+        )
 
-        try:
-            ts_df = sessiondb.timestamps_dataframe(cfg.bids_dir, subject, session)
-            if not ts_df.empty:
-                self.append_to_database(ts_df, key="timestamps")
-        except Exception:  # pragma: no cover - optional
-            cfg.logger.exception("Database update failed while storing timestamps")
+        df = pd.DataFrame([records], index=idx)
+        self.append_to_database(df, key="datapaths")
 
-        try:
-            if self.queue_log_path:
-                q_df = sessiondb.queue_dataframe(self.queue_log_path, subject, session)
-                if not q_df.empty:
-                    self.append_to_database(q_df, key="queue_stream")
-        except Exception:  # pragma: no cover - optional
-            cfg.logger.exception("Database update failed while storing queue data")
-
-        try:
-            cfg_df = sessiondb.config_dataframe(cfg)
-            if not cfg_df.empty:
-                self.append_to_database(cfg_df, key="config")
-        except Exception:  # pragma: no cover - optional
-            cfg.logger.exception("Database update failed while storing config")
+    def read_database(self, key: str = "datapaths") -> Optional[pd.DataFrame]:
+        """Read a DataFrame from the underlying :class:`H5Database`."""
+        if self.database:
+            return self.database.read(key)
+        return None
