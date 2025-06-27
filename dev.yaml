@@ -20,13 +20,15 @@ encoder:
   diameter_mm: 80
   sample_interval_ms: 20
   development_mode: True
+
   output:
     suffix: "wheel"
     file_type: "csv"
     bids_type: "beh"
 
+
 cameras:
-  - id: "dev"
+  - id: "Camera"
     name: "devcam1"
     backend: "micromanager"
     micromanager_path: "C:/Program Files/Micro-Manager-2.0"
@@ -44,7 +46,11 @@ cameras:
   #   name: "devcam2"
   #   backend: "micromanager"
   #   micromanager_path: "C:/Program Files/Micro-Manager-thor"
-
+  
+    properties:
+      Camera:
+        fps: 30
+        viewer_type: "static"
 
 
   # - id: "arducam"
