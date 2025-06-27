@@ -46,7 +46,6 @@ class ColoredFormatter(logging.Formatter):
         record.levelname = lvl
         return formatted
 
-_configured = False
 _log_dir: Optional[Path] = None
 
 
