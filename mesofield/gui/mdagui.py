@@ -15,7 +15,7 @@ from pymmcore_widgets import (
     SnapButton,
 )
 
-from mesofield.io.writer import CustomWriter
+from mesofield.data.writer import CustomWriter
 from mesofield.gui.viewer import ImagePreview, InteractivePreview
 
 class CustomMDAWidget(MDAWidget):
@@ -109,28 +109,31 @@ class MDA(QWidget):
 
         for cam in self.cameras:
             # Per-core container
-            core_box = QGroupBox(title=str(cam))
+            core_box = QGroupBox(title=str(cam.name))
             core_box.setLayout(QVBoxLayout())
             core_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
             # Preview widget based on cam.viewer
             if cam.viewer == "static":
-                preview = ImagePreview(mmcore=cam.core)
-                # Buttons row
-                btn_box = QWidget()
-                btn_box.setLayout(QHBoxLayout())
-                snap_btn = SnapButton(mmcore=cam.core)
-                live_btn = LiveButton(mmcore=cam.core)
-                btn_box.layout().addWidget(snap_btn)
-                btn_box.layout().addWidget(live_btn)
-                core_box.layout().addWidget(btn_box)
-            else:
-                preview = InteractivePreview(image_payload=cam.core.image_ready)
-                cam.core.start()
+                if isinstance(cam.core, CMMCorePlus):
+                    preview = ImagePreview(mmcore=cam.core)
+                    # Buttons row
+                    btn_box = QWidget()
+                    btn_box.setLayout(QHBoxLayout())
+                    snap_btn = SnapButton(mmcore=cam.core)
+                    live_btn = LiveButton(mmcore=cam.core)
+                    btn_box.layout().addWidget(snap_btn)
+                    btn_box.layout().addWidget(live_btn)
+                    core_box.layout().addWidget(btn_box)
+                    core_box.layout().addWidget(preview)
+                    cores_groupbox.layout().addWidget(core_box)
+                    self.layout().addWidget(cores_groupbox)
+                else:
+                    preview = InteractivePreview(image_payload=cam.core.image_ready)
+                    cam.core.start()
+                    core_box.layout().addWidget(preview)
+                    cores_groupbox.layout().addWidget(core_box)
 
-            core_box.layout().addWidget(preview)
 
-            cores_groupbox.layout().addWidget(core_box)
 
-        self.layout().addWidget(cores_groupbox)
 

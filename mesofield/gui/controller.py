@@ -1,7 +1,6 @@
 import os
 from datetime import datetime
 import threading
-import time
 import numpy as np
 
 from qtpy.QtCore import Qt
@@ -25,14 +24,14 @@ from PyQt6.QtWidgets import (
     QCheckBox
 )
 from PyQt6.QtGui import QIcon
+from qtpy.QtGui import QDesktopServices
+from qtpy.QtCore import QUrl
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from mesofield.config import ExperimentConfig
-    from pymmcore_plus import CMMCorePlus
+    from mesofield.protocols import Procedure
 
-from mesofield.subprocesses.psychopy import PsychoPyProcess
-from mesofield.io import CustomWriter
 from mesofield.gui import ConfigTableModel
 from .dynamic_controller import DynamicController
 
@@ -63,30 +62,21 @@ class ConfigFormWidget(QWidget):
 
 
 class ConfigController(QWidget):
-    """AcquisitionEngine object for the napari-mesofield plugin.
+    """
+    The ConfigController widget allows selection of a save directory,
+    loading a JSON configuration file, and editing the configuration parameters in a table.
+    
     The object connects to the Micro-Manager Core object instances and the Config object.
-
-    The ConfigController widget is a QWidget that allows the user to select a save directory,
-    load a JSON configuration file, and edit the configuration parameters in a table.
-    The user can also trigger the MDA sequence with the current configuration parameters.
     
     The ConfigController widget emits signals to notify other widgets when the configuration is updated
     and when the record button is pressed.
     
     Public Methods:
     ----------------
-    save_config(): 
-        saves the current configuration to a JSON file
-    
     record(): 
         triggers the MDA sequence with the configuration parameters
-    
-    launch_psychopy(): 
-        launches the PsychoPy experiment as a subprocess with ExperimentConfig parameters
-    
-    show_popup(): 
-        shows a popup message to the user
-    
+
+
     Private Methods:
     ----------------
     _select_directory(): 
@@ -107,30 +97,21 @@ class ConfigController(QWidget):
     configUpdated = pyqtSignal(object)
     recordStarted = pyqtSignal(str)
     # ------------------------------------------------------------------------------------- #
-    
-    def __init__(self, cfg: 'ExperimentConfig'):
+    def __init__(self, procedure: 'Procedure'):
         super().__init__()
-        self.mmcores = cfg._cores
-        # TODO: Add a check for the number of cores, and adjust rest of controller accordingly
-
-        self.config = cfg
-        # Sync registry changes to legacy parameters dict
-        for key in self.config._registry.keys():
-            self.config._registry.register_callback(key, self._on_registry_updated)
-        if len(self.mmcores) == 1:
-            self._mmc: CMMCorePlus = self.mmcores[0]
-        elif len(self.mmcores) == 2:
-            self._mmc1: CMMCorePlus = self.mmcores[0]
-            self._mmc2: CMMCorePlus = self.mmcores[1]
-
-        self.psychopy_process = None
+        self.config = procedure.config 
+        self.procedure = procedure
 
         # Create main layout
         layout = QVBoxLayout(self)
         self.setFixedWidth(500)
 
         # ==================================== GUI Widgets ===================================== #
-
+        # Button to open the BIDS directory in the system file explorer (hidden until a directory is picked)
+        self.open_bids_button = QPushButton("Open BIDS Directory")
+        layout.addWidget(self.open_bids_button)
+        self.open_bids_button.setToolTip("Open the procedure.config.bids_dir in your file explorer")
+        
         # 1. Selecting a save directory
         self.directory_label = QLabel('Select Save Directory:')
         self.directory_line_edit = QLineEdit()
@@ -155,7 +136,7 @@ class ConfigController(QWidget):
         layout.addLayout(json_layout)
 
         # 3. Table view to display the configuration parameters loaded from the JSON
-        self.config_model = ConfigFormWidget(self.config._registry)
+        self.config_model = ConfigFormWidget(self.procedure.config)
         layout.addWidget(self.config_model)
 
         # 4. Record button to start the MDA sequence
@@ -183,16 +164,17 @@ class ConfigController(QWidget):
             QPushButton:pressed {
             background-color: #212121;
             }
-        """)
-
+        """)        
         layout.addWidget(self.record_button)
+        self.record_button.setToolTip("Start Recording (MDA Sequence)")
+        self.record_button.setShortcut("Ctrl+R")  # Set shortcut for recording
 
         # 5. Add Note button to add a note to the configuration
         self.add_note_button = QPushButton("Add Note")
         layout.addWidget(self.add_note_button)
 
         # Dynamic hardware-specific controls
-        self.dynamic_controller = DynamicController(cfg, parent=self)
+        self.dynamic_controller = DynamicController(self.procedure.config, parent=self)
         layout.addWidget(self.dynamic_controller)
         # ------------------------------------------------------------------------------------- #
 
@@ -202,13 +184,15 @@ class ConfigController(QWidget):
         self.json_dropdown.currentIndexChanged.connect(self._update_config)
         self.record_button.clicked.connect(self.record)
         self.add_note_button.clicked.connect(self._add_note)
-        
+        self.open_bids_button.clicked.connect(self._open_bids_directory)
+
         # Connect dynamic controls using constants defined in DynamicController
         dynamic_buttons = [
             (DynamicController.LED_TEST_BTN, self._test_led),
             (DynamicController.STOP_BTN, self._stop_led),
             (DynamicController.SNAP_BTN, lambda: self._save_snapshot(self._mmc1.snap())),
-            (DynamicController.PSYCHOPY_BTN, self.launch_psychopy),
+            (DynamicController.NIDAQ_BTN, self._test_nidaq),
+            #(DynamicController.PSYCHOPY_BTN, self.launch_psychopy),
         ]
         for btn_attr, handler in dynamic_buttons:
             if hasattr(self.dynamic_controller, btn_attr):
@@ -217,6 +201,76 @@ class ConfigController(QWidget):
         # ------------------------------------------------------------------------------------- #
 
     # ============================== Public Class Methods ============================================ #
+
+    def record(self):
+        """Run the experimental procedure or fallback to legacy MDA sequence."""
+        
+        # If a procedure is available, use it for the experimental workflow
+        if self.procedure is not None:
+            try:
+                # Run the procedure in a separate thread to avoid blocking the GUI
+                self.procedure_thread = threading.Thread(target=self.procedure.run())
+                self.procedure_thread.start()
+                
+                # Signal that recording has started
+                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.recordStarted.emit(timestamp)
+                return
+            except Exception as e:
+                QMessageBox.critical(self, "Procedure Error", f"Failed to run procedure: {str(e)}")
+                return
+
+    #-----------------------------------------------------------------------------------------------#
+
+    #============================== Private Class Methods ==========================================#
+
+    def _select_directory(self):
+        """Open a dialog to select a directory and update the GUI accordingly."""
+        directory = QFileDialog.getExistingDirectory(self, "Select Save Directory")
+        if directory:
+            self.directory_line_edit.setText(directory)
+            self._get_json_file_choices(directory)
+
+    def _open_bids_directory(self):
+        """Open the BIDS directory in the system file explorer."""
+        path = self.config.bids_dir
+        if not path or not os.path.isdir(path):
+            QMessageBox.warning(self, "Warning", "No BIDS directory selected or it does not exist.")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+    def _get_json_file_choices(self, path):
+        """Return a list of JSON files in the current directory."""
+        import glob
+        self.config.save_dir = path
+        try:
+            json_files = glob.glob(os.path.join(path, "*.json"))
+            self.json_dropdown.clear()
+            self.json_dropdown.addItems(json_files)
+        except Exception as e:
+            print(f"Error getting JSON files from directory: {path}\n{e}")
+
+    def _update_config(self, index):
+        """Update the experiment configuration from a new JSON file."""
+        json_path_input = self.json_dropdown.currentText()
+
+        if json_path_input and os.path.isfile(json_path_input):
+            try:
+                self.procedure.setup_configuration(json_path_input)
+                # Rebuild table model to reflect new parameters
+                self.config_table_model = ConfigTableModel(self.config)
+                old_form = getattr(self, 'config_model', None)
+                new_form = ConfigFormWidget(self.config)
+                self.config_model = new_form
+                if old_form:
+                    layout = self.layout()
+                    idx = layout.indexOf(old_form)
+                    layout.insertWidget(idx, new_form)
+                    layout.removeWidget(old_form)
+                    old_form.deleteLater()
+            except Exception as e:
+                print(f"Trouble updating ExperimentConfig from AcquisitionEngine:\n{json_path_input}\nConfiguration not updated.")
+                print(e) 
 
     def _save_snapshot(self, image: np.ndarray):
         """Creates a PyQt popup window for saving the snapped image."""
@@ -255,111 +309,6 @@ class ConfigController(QWidget):
         # Close the dialog
         dialog.accept()
 
-    def record(self):
-        """Run the MDA sequence with the global Config object parameters loaded from JSON."""
-
-        # TODO: Add a check for the MDA sequence and pupil sequence
-        # TODO: Fix this ugly logic :)
-        if len(self.mmcores) == 1:
-            self.writer = CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))
-        elif len(self.mmcores) == 2:        
-            self.thread1 = threading.Thread(target=self._mmc1.run_mda, 
-                                       args=(self.config.meso_sequence,), 
-                                       kwargs={'output': CustomWriter(self.config.make_path("meso", "ome.tiff", bids_type="func"))})
-            self.thread2 = threading.Thread(target=self._mmc2.run_mda, 
-                                       args=(self.config.pupil_sequence,), 
-                                       kwargs={'output': CustomWriter(self.config.make_path("pupil", "ome.tiff", bids_type="func"))})
-
-        # Wait for spacebar press if start_on_trigger is True
-        if self.config.start_on_trigger:
-            proc = self.launch_psychopy()
-            # abort if PsychoPy failed to initialize
-            # if not getattr(proc, '_handshake_ok', False):
-            #     return
-
-        self.config.hardware.encoder.start_recording(self.config.make_path('treadmill_data', 'csv', 'beh'))
-        if len(self.mmcores) == 2:        
-            self.thread1.start()
-            time.sleep(0.5)
-            self.thread2.start()
-        else:
-            self.thread0 = self._mmc.run_mda(self.config.pupil_sequence, output=self.writer)
-
-        # Signals to start the MDA sequence and pass a formatted timestamp
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.recordStarted.emit(timestamp)
-
-    def launch_psychopy(self):
-        """Launches a PsychoPy experiment as a subprocess with the current ExperimentConfig parameters."""
-        # use PsychoPyProcess to manage handshake and subprocess
-        self.psychopy_process = PsychoPyProcess(self.config, parent=self)
-        self.psychopy_process.error.connect(self._on_psychopy_error)
-        self.psychopy_process.start()
-
-    def _on_psychopy_error(self, message):
-        """Handle PsychoPyProcess error signal (e.g. handshake timeout)."""
-        QMessageBox.critical(self, "PsychoPy Error", message)
-    
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Space:
-            self.event_loop.quit()
-    
-    def show_popup(self):
-        msg_box = QMessageBox()
-        msg_box.setText("PsychoPy is Ready:\n Press spacebar to start recording.")
-        #msg_box.setStandardButtons(QMessageBox.Ok)
-        msg_box.exec_()
-    
-    def save_config(self):
-        """ Save the current configuration to a JSON file """
-        self.config.save_parameters()
-        
-    #TODO: add breakdown method
-
-    #-----------------------------------------------------------------------------------------------#
-    
-    #============================== Private Class Methods ==========================================#
-
-    def _select_directory(self):
-        """Open a dialog to select a directory and update the GUI accordingly."""
-        directory = QFileDialog.getExistingDirectory(self, "Select Save Directory")
-        if directory:
-            self.directory_line_edit.setText(directory)
-            self._get_json_file_choices(directory)
-
-    def _get_json_file_choices(self, path):
-        """Return a list of JSON files in the current directory."""
-        import glob
-        self.config.save_dir = path
-        try:
-            json_files = glob.glob(os.path.join(path, "*.json"))
-            self.json_dropdown.clear()
-            self.json_dropdown.addItems(json_files)
-        except Exception as e:
-            print(f"Error getting JSON files from directory: {path}\n{e}")
-
-    def _update_config(self, index):
-        """Update the experiment configuration from a new JSON file."""
-        json_path_input = self.json_dropdown.currentText()
-
-        if json_path_input and os.path.isfile(json_path_input):
-            try:
-                self.config.load_json(json_path_input)
-                # Rebuild table model to reflect new parameters
-                self.config_table_model = ConfigTableModel(self.config._registry)
-                old_form = getattr(self, 'config_model', None)
-                new_form = ConfigFormWidget(self.config._registry)
-                self.config_model = new_form
-                if old_form:
-                    layout = self.layout()
-                    idx = layout.indexOf(old_form)
-                    layout.insertWidget(idx, new_form)
-                    layout.removeWidget(old_form)
-                    old_form.deleteLater()
-            except Exception as e:
-                print(f"Trouble updating ExperimentConfig from AcquisitionEngine:\n{json_path_input}\nConfiguration not updated.")
-                print(e) 
-
     def _test_led(self):
         """
         Test the LED pattern by sending a test sequence to the Arduino-Switch device.
@@ -383,25 +332,22 @@ class ConfigController(QWidget):
             print("LED test pattern stopped successfully.")
         except Exception as e:
             print(f"Error stopping LED pattern: {e}")
-            
+    
     def _add_note(self):
         """
         Open a dialog to get a note from the user and save it to the ExperimentConfig.notes list.
         """
-        time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         text, ok = QInputDialog.getText(self, 'Add Note', 'Enter your note:')
         if ok and text:
             note_with_timestamp = f"{time}: {text}"
             self.config.notes.append(note_with_timestamp)
 
-    def _on_registry_updated(self, key, value):
-        """Callback to sync registry changes into ExperimentConfig._parameters."""
-        try:
-            self.config._parameters[key] = value
-        except Exception:
-            pass
-        self.configUpdated.emit(self.config)
-
+    def _test_nidaq(self):
+        """
+        PUlse the nidaq device to test its functionality.
+        """
+        self.procedure.config.hardware.get_device('nidaq').start()
     # ----------------------------------------------------------------------------------------------- #
 
 

@@ -91,7 +91,7 @@ class CustomWriter(_5DWriterBase[np.memmap]):
     ) -> None:
         """Write a frame to the file."""
         ary[index] = frame
-        print(f"Writing frame {index}")
+        # print(f"Writing frame {index}")
 
     def new_array(
         self, position_key: str, dtype: np.dtype, sizes: dict[str, int]
@@ -204,4 +204,64 @@ class CustomJSONEncoder(json.JSONEncoder):
         if isinstance(object, MDAEvent):
             return None #ignore the MDAEvents for now
         return super().default(object)
+
+
+class CV2Writer(_5DWriterBase[Any]):
+    """Write incoming MDA frames directly to an mp4/avi video using OpenCV."""
+
+    def __init__(self, filename: Path | str, fps: int = 30, fourcc: str = "mp4v") -> None:
+        try:
+            import cv2  # noqa: F401
+        except ImportError as e:  # pragma: no cover - optional dependency
+            raise ImportError(
+                "opencv-python is required to use this handler. "
+                "Please `pip install opencv-python`."
+            ) from e
+
+        self._filename = str(filename)
+        if not self._filename.endswith((".mp4", ".avi")):
+            raise ValueError("filename must end with '.mp4' or '.avi'")
+        self._fps = fps
+        self._fourcc = fourcc
+        self._frame_metadata_filename = self._filename + FRAME_MD_FILENAME
+
+        super().__init__()
+
+    def new_array(self, position_key: str, dtype: np.dtype, sizes: dict[str, int]):
+        import cv2
+
+        width = sizes["x"]
+        height = sizes["y"]
+        is_color = sizes.get("c", 1) > 1
+
+        if (seq := self.current_sequence) and seq.sizes.get("p", 1) > 1:
+            fname = self._filename.replace(".mp4", f"_{position_key}.mp4")
+            fname = fname.replace(".avi", f"_{position_key}.avi")
+        else:
+            fname = self._filename
+
+        fourcc = cv2.VideoWriter.fourcc(*self._fourcc)
+        writer = cv2.VideoWriter(fname, fourcc, self._fps, (width, height), isColor=is_color)
+        return writer
+
+    def write_frame(self, ary: Any, index: tuple[int, ...], frame: np.ndarray) -> None:
+        import cv2
+
+        # allocate a destination array for normalization
+        dst = np.empty_like(frame)
+        frame_8u = cv2.normalize(frame, dst, 0, 255, cv2.NORM_MINMAX)
+        frame_8u = frame_8u.astype(np.uint8)
+        ary.write(frame_8u)
+
+    def finalize_metadata(self) -> None:
+        for writer in self.position_arrays.values():
+            try:
+                writer.release()
+            except Exception:
+                pass
+
+        regular_dict = dict(self.frame_metadatas)
+        json_str = json.dumps(regular_dict, indent=4, cls=CustomJSONEncoder)
+        with open(self._frame_metadata_filename, "w") as file:
+            file.write(json_str)
  

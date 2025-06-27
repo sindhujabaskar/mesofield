@@ -14,12 +14,12 @@ os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
 logging.getLogger("ipykernel.inprocess.ipkernel").setLevel(logging.WARNING)
 
 def get_experimental_summary(experiment_dir):
-    import mesofield.data.load as load
+    import mesofield.data.proc.load as load
     datadict =  load.file_hierarchy(experiment_dir)
     load.experiment_progress_summary(datadict)
 
 def get_file_hierarchy_object(experiment_dir):
-    import mesofield.data.load as load
+    import mesofield.data.proc.load as load
     return load.file_hierarchy(experiment_dir)
 
 
@@ -49,19 +49,82 @@ def cli():
 
 
 @cli.command()
-@click.option('--params', default='hardware.yaml', help='Path to the config file')
-def launch(params):
-    from PyQt6.QtWidgets import QApplication
+@click.option('--params', default='dev.yaml', help='Path to the config file')
+@click.option('--procedure-config', default=None, help='Path to procedure-specific configuration file')
+@click.option('--experiment-id', default='default', help='Unique identifier for the experiment')
+@click.option('--experimentor', default='researcher', help='Name of the person running the experiment')
+def launch(params, procedure_config, experiment_id, experimentor):
+    from PyQt6.QtWidgets import QApplication, QSplashScreen
+    from PyQt6.QtGui import QPixmap, QPainter, QFont
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QColor, QRadialGradient
+    
     from mesofield.gui.maingui import MainWindow
+    from mesofield.base import Procedure, create_procedure
     from mesofield.config import ExperimentConfig
-
-    """Launch the mesofield acquisition interface."""
-    print('Launching mesofield acquisition interface...')
+    
     app = QApplication([])
-    config = ExperimentConfig(params)
-    config.hardware._configure_engines(config)
-    mesofield = MainWindow(config)
+
+    # config = ExperimentConfig(params)
+    # config.hardware._configure_engines(config)
+        # 1) If you have a PNG:
+    # pixmap = QPixmap(r'mesofield\gui\Mesofield_icon.png')
+    # pixmap = pixmap.scaled(500, 500, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    # splash = QSplashScreen(pixmap)
+    #splash.setFixedSize(500, 500)
+    
+# Font: Sub-Zero; character width: Full, Character Height: Fitted
+# https://patorjk.com/software/taag/#p=display&h=0&v=1&f=Sub-Zero&t=Mesofield
+    """Launch the mesofield acquisition interface."""
+    ascii = r"""
+ __    __     ______     ______     ______     ______   __     ______     __         _____    
+/\ "-./  \   /\  ___\   /\  ___\   /\  __ \   /\  ___\ /\ \   /\  ___\   /\ \       /\  __-.  
+\ \ \-./\ \  \ \  __\   \ \___  \  \ \ \/\ \  \ \  __\ \ \ \  \ \  __\   \ \ \____  \ \ \/\ \ 
+ \ \_\ \ \_\  \ \_____\  \/\_____\  \ \_____\  \ \_\    \ \_\  \ \_____\  \ \_____\  \ \____- 
+  \/_/  \/_/   \/_____/   \/_____/   \/_____/   \/_/     \/_/   \/_____/   \/_____/   \/____/ 
+                                                                                  
+-------------------------  Mesofield Acquisition Interface  ---------------------------------
+"""
+
+    # Create a transparent pixmap
+    pixmap = QPixmap(1100, 210)
+    pixmap.fill(Qt.GlobalColor.transparent)
+
+    # Build a radial gradient: dark center that fades out at the edges
+    center = pixmap.rect().center()
+    radius = max(pixmap.width(), pixmap.height()) / 2
+    gradient = QRadialGradient(center.x(), center.y(), radius)
+    gradient.setColorAt(0.0, QColor(1, 25, 5))  # solid dark center
+    gradient.setColorAt(0.7, QColor(10, 15, 0, 200))  # keep dark until 80%
+    gradient.setColorAt(1.0, QColor(0, 0, 0, 0))    # fully transparent edges
+
+    painter = QPainter(pixmap)
+    # Fill entire pixmap with the gradient block
+    painter.fillRect(pixmap.rect(), gradient)
+
+    # Draw the ASCII art on top
+    painter.setPen(Qt.GlobalColor.green)
+    painter.setFont(QFont("Courier", 12))
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, ascii)
+    painter.end()
+
+    splash = QSplashScreen(pixmap)
+
+    splash.show()
+    app.processEvents()  # ensure the splash appears
+    import time
+    time.sleep(5)
+    procedure = create_procedure(
+        Procedure,
+        experiment_id=experiment_id,
+        experimentor=experimentor,
+        hardware_yaml=params,
+        json_config=procedure_config
+    )
+    
+    mesofield = MainWindow(procedure)
     mesofield.show()
+    splash.finish(mesofield)
     app.exec()
 
 
@@ -70,7 +133,7 @@ def launch(params):
 @click.option('--sub', help='Subject ID (the name of the subject folder)')
 def trace_meso(experiment_dir, subject_id):
     import pandas as pd
-    import mesofield.data.load as load
+    import mesofield.data.proc.load as load
     import mesofield.data.batch as batch
     
     datadict =  load.file_hierarchy(experiment_dir)
@@ -134,7 +197,7 @@ def get_fps(params):
     frame_metadata: FrameMetaV1 = None
     
     config = ExperimentConfig(params)
-    config.hardware._configure_engines(config)
+    config.hardware.initialize(config)
 
     # measure over a fixed number of frames to get fps
     num_frames = 300

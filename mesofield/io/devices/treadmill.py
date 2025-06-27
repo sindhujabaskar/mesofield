@@ -29,15 +29,13 @@ Usage Example:
     
     # Run until interrupted...
 """
-import os
 import serial
 import time
-import threading
 import logging
 import csv
 from typing import Optional
 from dataclasses import dataclass
-
+from datetime import datetime
 from PyQt6.QtCore import pyqtSignal, QThread
 
 
@@ -51,71 +49,65 @@ class EncoderData:
         return (f"EncoderData(timestamp={self.timestamp}, "
                 f"distance={self.distance:.3f} mm, speed={self.speed:.3f} mm/s)")
 
+from mesofield import DeviceRegistry
+
+
+@DeviceRegistry.register("encoder")
 class EncoderSerialInterface(QThread):
     
-    serialDataReceived = pyqtSignal(object)  # Emits the parsed EncoderData
+    serialDataReceived = pyqtSignal(int)  # Emits the parsed EncoderData
     serialStreamStarted = pyqtSignal()         # Emits when streaming starts
     serialStreamStopped = pyqtSignal()         # Emits when streaming stops
     serialSpeedUpdated = pyqtSignal(float, float)  # Emits elapsed time and current speed
-
-    def __init__(self, port: str, baudrate: int = 192000, data_callback=None):
+    device_id: str = "treadmill"  # Default device ID, can be overridden
+    file_type: str = "csv"
+    bids_type: Optional[str] = "beh"
+    _started: datetime  # Timestamp when the interface started
+    _stopped: datetime # Timestamp when the interface stopped
+    
+    def __init__(self, port: str, baudrate: int = 192000):
         super().__init__()
         self.logger = logging.getLogger("EncoderSerialInterface")
+        #self.device_id: str
         self.serial_port = port
         self.baud_rate = baudrate
-        self.data_callback = data_callback
+        self.output_path: str = ''  # Path to save recorded data
         
         self._recording = False
-        self._recording_file = None
-        self._recorded_data = []
+        self.session_data = []
         try:
             self.ser = serial.Serial(port, baudrate, timeout=1)
         except serial.SerialException as e:
             self.logger.error(f"Failed to open serial port {port}: {e}")
             raise
 
-        self.data_saver = None
         self.logger.info(f"EncoderSerialInterface initialized on port {port} with baudrate {baudrate}")
 
     def start_recording(self, file_path: str):
+        self._recording = True
+        self._started = datetime.now()
         if not self.isRunning():
             self.start()
         if self.isRunning():
             # Flush the input buffer to discard any backlog of serial data.
             self.ser.reset_input_buffer()
-            self._recording = True
-            self._recording_file = file_path
-            self._recorded_data = []
-            self.logger.info(f"Recording started. Data will be stored to {file_path}")
+            self.output_path = file_path
+            self.session_data = []
+            self.logger.debug(f"Recording started. Data will be stored to {file_path}")
         else:
+            self.recording = False
             self.logger.warning("Cannot start recording: Serial interface is not running.")
-
-    def stop_recording(self):
-        if self._recording:
-            self._recording = False
-            try:
-                with open(self._recording_file, 'w', newline='') as f:
-                    writer = csv.DictWriter(f, fieldnames=['timestamp', 'distance', 'speed'])
-                    writer.writeheader()
-                    for d in self._recorded_data:
-                        writer.writerow({'timestamp': d.timestamp, 'distance': d.distance, 'speed': d.speed})
-                self.logger.info(f"Recording stopped. Data saved to {self._recording_file}")
-            except Exception as e:
-                self.logger.error(f"Failed to save recorded data: {e}")
-        else:
-            self.logger.warning(f"Recording not active; nothing to stop.")
 
     def start(self):
         self.serialStreamStarted.emit()
         super().start()
 
     def stop(self):
-        self.requestInterruption()
-        self.wait()
-        if self.ser.is_open:
-            self.ser.close()
-        self.serialStreamStopped.emit()
-        self.logger.info(f"Serial interface stopped and port closed.")
+        if self._recording:
+            self._recording = False
+            #self.session_data = list(self.session_data)
+        else:
+            self.logger.warning("Recording not active; nothing to stop.")
 
     def run(self):
         self.logger.info(f"Serial read thread started.")
@@ -128,20 +120,43 @@ class EncoderSerialInterface(QThread):
                 if line:
                     data = self._parse_line(line)
                     if data:
-                        if self.data_callback:
-                            self.data_callback(data)
-                        # Emit signals
-                        self.serialDataReceived.emit(data)
+                        self.serialDataReceived.emit(data.timestamp)
                         self.serialSpeedUpdated.emit(data.timestamp or 0, data.speed)
                         # Record data if recording is active.
                         if self._recording:
-                            self._recorded_data.append(data)
+                            self.session_data.append(data)
             except serial.SerialException as e:
                 self.logger.error(f"Serial error: {e}")
                 break
             except Exception as ex:
                 self.logger.error(f"Unexpected error: {ex}")
         self.logger.info(f"Exiting serial read loop.")
+
+    def save_data(self, path: Optional[str] = None):
+        """
+        Save the recorded data to a CSV file.
+        This method is called when recording is stopped.
+        """
+        if path:
+            self.output_path = path
+        if not self.session_data:
+            self.logger.warning("No data recorded to save.")
+            return
+        
+        with open(self.output_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['timestamp', 'distance_mm', 'speed_mm'])
+            for data in self.session_data:
+                writer.writerow([data.timestamp, data.distance, data.speed])
+        
+        self.logger.info(f"Recorded data saved to {self.output_path}")
+
+    def get_data(self) -> list[EncoderData]:
+        """
+        Get the recorded data.
+        This method returns the data collected during the recording session.
+        """
+        return list(self.session_data)
 
     def _parse_line(self, line: str) -> Optional[EncoderData]:
         parts = line.split(',')
@@ -170,7 +185,12 @@ class EncoderSerialInterface(QThread):
             self.logger.warning(f"Serial port not open; command not sent.")
 
     def shutdown(self):
-        self.stop()
+        self.requestInterruption()
+        self.wait()
+        if self.ser.is_open:
+            self.ser.close()
+        self.serialStreamStopped.emit()
+        self.logger.info(f"Serial interface stopped and port closed.")
 
 def main():
     """

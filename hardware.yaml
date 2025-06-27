@@ -9,6 +9,10 @@ encoder:
   type: "treadmill"
   port: "COM6"
   baudrate: 192000
+  output:
+    suffix: "treadmill"
+    file_type: "csv"
+    bids_type: "beh"
 
 cameras:
   - id: "Dhyana"
@@ -16,6 +20,10 @@ cameras:
     backend: "micromanager"
     micromanager_path: "C:/Program Files/Micro-Manager-2.0"
     configuration_path: "C:/Program Files/Micro-Manager-2.0/mm-sipefield.cfg"
+    output:
+      suffix: "mesoscope"
+      file_type: "ome.tiff"
+      bids_type: "func"
     properties:
       Dhyana:
         Output Trigger Port: 2
@@ -37,6 +45,10 @@ cameras:
     backend: "micromanager"
     micromanager_path: "C:/Program Files/Micro-Manager-thor"
     configuration_path: "C:/Program Files/Micro-Manager-2.0/ThorCam.cfg"
+    output:
+      suffix: "pupil"
+      file_type: "ome.tiff"
+      bids_type: "func"
     properties:
       ThorCam:
         Exposure: 20

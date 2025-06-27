@@ -363,7 +363,7 @@ def pickle_to_df(pickle_path) -> pd.DataFrame:
     return df
 
 def pupil_means(pickle_path) -> pd.DataFrame:
-    from mesofield.data.transform import process_deeplabcut_pupil_data
+    from mesofield.data.proc.transform import process_deeplabcut_pupil_data
     process_deeplabcut_pupil_data(pickle_to_df(pickle_path))
     
 

@@ -12,16 +12,21 @@ When implementing these protocols, there are two approaches:
 1. Direct inheritance (for regular classes without metaclass conflicts):
    ```python
    class MySensor(DataAcquisitionDevice):
-       # Implement required methods and attributes
+       def __init__(self):
+           self._init_logger()  # Initialize logging
+           # Implement required methods and attributes
    ```
 
 2. Duck typing (for classes with existing inheritance or metaclass conflicts, e.g., QThread):
    ```python
    class MyQThreadSensor(QThread):  # Cannot inherit from Protocol due to metaclass conflict
-       # Implement all required methods and attributes
-       device_type = "sensor"
-       device_id = "my_sensor"
-       # etc.
+       def __init__(self):
+           super().__init__()
+           self._init_logger()  # Initialize logging manually
+           # Implement all required methods and attributes
+           self.device_type = "sensor"
+           self.device_id = "my_sensor"
+           # etc.
    ```
 
 The second approach is necessary for Qt classes (QObject, QThread, QWidget) or 
@@ -31,50 +36,23 @@ internally, so both approaches will work with our system.
 
 from typing import Dict, List, Any, Optional, Protocol, TypeVar, Generic, runtime_checkable
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from mesofield.hardware import HardwareManager
+
 T = TypeVar('T')
 
 # These are the Protocol definitions - they are useful for static type checking
 # and documentation, but should not be used for inheritance with classes that
 # already have a metaclass (like QThread)
 
-class Procedure(Protocol):
-    """Protocol defining the standard interface for experiment procedures."""
-    
-    experiment_id: str
-    experimentor: str
-    hardware_yaml: str
-    data_dir: str
-    
-    def initialize_hardware(self) -> bool:
-        """Setup the experiment procedure.
-        
-        Returns:
-            bool: True if setup was successful, False otherwise.
-        """
-    
-    def setup_configuration(self, json_config: str) -> None:
-        """Set up the configuration for the experiment procedure.
-        
-        Args:
-            json_config: Path to a JSON configuration file (.json)
-        """
-        ...    
-        
-    def run(self) -> None:
-        """Run the experiment procedure."""
-        ...
-        
-    def save_data(self) -> None:
-        """Save data from the experiment."""
-        ...
-        
-    def cleanup(self) -> None:
-        """Clean up after the experiment procedure."""
-        ...
 
 # Define configuration interface
 class Configurator(Protocol):
     """Protocol defining the interface for configuration providers."""
+    
+    hardware: "HardwareManager"
+    
     def get(self, key: str, default: Any = None) -> Any:
         """Retrieve a configuration value for the given key."""
         ...
@@ -95,20 +73,63 @@ class Configurator(Protocol):
         """Get all configuration key-value pairs."""
         ...
 
-
+class Procedure(Protocol):
+    """Protocol defining the standard interface for experiment procedures."""
+    
+    experiment_id: str
+    experimentor: str
+    config: Configurator
+    hardware_yaml: str
+    data_dir: str
+    
+    def initialize_hardware(self) -> bool:
+        """Setup the experiment procedure.
+        
+        Returns:
+            bool: True if setup was successful, False otherwise.
+        """
+        ...
+    
+    def setup_configuration(self, json_config: str) -> None:
+        """Set up the configuration for the experiment procedure.
+        
+        Args:
+            json_config: Path to a JSON configuration file (.json)
+        """
+        ...    
+        
+    def run(self) -> None:
+        """Run the experiment procedure."""
+        ...
+        
+    def save_data(self) -> None:
+        """Save data from the experiment."""
+        ...
+        
+    def cleanup(self) -> None:
+        """Clean up after the experiment procedure."""
+        ...
+        
 @runtime_checkable
 class HardwareDevice(Protocol):
     """Protocol defining the standard interface for all hardware devices."""
     
     device_type: str
     device_id: str
-    config: Dict[str, Any]
+    #config: Dict[str, Any]
     
     def initialize(self) -> bool:
         """Initialize the hardware device.
         
         Returns:
             bool: True if stopped successfully, False otherwise.
+        """
+        ...
+    
+    def stop(self):
+        """Stop the hardware device after starting it.
+        
+        This method will be called by the HardwareManager when a Procedure cleans up
         """
         ...
     
@@ -135,10 +156,14 @@ class HardwareDevice(Protocol):
 @runtime_checkable
 class DataProducer(HardwareDevice, Protocol):
     """Protocol defining the interface for data-producing components."""
-    
+
     sampling_rate: float  # in Hz
     data_type: str
+    file_type: str
+    bids_type: Optional[str] = None
     is_active: bool
+    output_path: str
+    metadata_path: Optional[str] = None
     
     def start(self) -> bool:
         """Start data acquisition or operation.
@@ -155,7 +180,11 @@ class DataProducer(HardwareDevice, Protocol):
             bool: True if stopped successfully, False otherwise.
         """
         ...
-    
+        
+    def save_data(self, path: Optional[str] = None):
+        """Save the device data captured during the recording"""
+        ...
+        
     def get_data(self) -> Optional[Any]:
         """Get the latest data from the producer.
         

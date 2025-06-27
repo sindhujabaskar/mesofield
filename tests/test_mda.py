@@ -1,5 +1,5 @@
 import pytest
-pytest.skip("Skipping hardware-dependent MDA tests", allow_module_level=True)
+#pytest.skip("Skipping hardware-dependent MDA tests", allow_module_level=True)
 
 from pymmcore_plus import CMMCorePlus
 import useq
@@ -9,7 +9,7 @@ def test_mmcore_mda():
     import time
     
     core = CMMCorePlus()
-    core.loadSystemConfiguration("C:/Program Files/Micro-Manager-2.0/mm-sipefield.cfg")
+    core.loadSystemConfiguration()
     
     core.startContinuousSequenceAcquisition()
     time.sleep(1)
