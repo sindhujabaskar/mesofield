@@ -102,6 +102,9 @@ class MainWindow(QMainWindow):
         self.kernel_manager = QtInProcessKernelManager()
         self.kernel_manager.start_kernel()
         self.kernel = self.kernel_manager.kernel
+        # suppress the kernel’s built-in banner
+        self.kernel.shell.banner1 = ""
+        self.kernel.shell.banner2 = ""
         self.kernel.gui = 'qt'
 
         # Create a kernel client and start channels
