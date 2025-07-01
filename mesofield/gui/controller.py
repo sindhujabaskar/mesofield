@@ -37,12 +37,14 @@ from .dynamic_controller import DynamicController
 
 class ConfigFormWidget(QWidget):
     """Map each config key to an appropriate editor in a form layout."""
-    def __init__(self, registry):
+    def __init__(self, registry, keys=None):
         super().__init__()
         self._registry = registry
         form = QFormLayout(self)
+        if keys is None:
+            keys = self._registry.keys()
         # create editor per config key with initial values and two-way binding
-        for key in self._registry.keys():
+        for key in keys:
             type_hint = self._registry.get_metadata(key).get("type")
             value = self._registry.get(key)
             if type_hint is int:
@@ -54,6 +56,10 @@ class ConfigFormWidget(QWidget):
                 editor = QCheckBox()
                 editor.setChecked(bool(value))
                 editor.toggled.connect(lambda checked, k=key: self._registry.set(k, checked))
+            elif type_hint is list: #create a dropdown for keys registered in the ExperimentConfig as list types
+                editor = QComboBox()
+                editor.addItems(value)
+                editor.currentTextChanged.connect(lambda text, k=key: self._registry.set(k, text))
             else:
                 editor = QLineEdit()
                 editor.setText(str(value))
@@ -63,8 +69,8 @@ class ConfigFormWidget(QWidget):
 
 class ConfigController(QWidget):
     """
-    The ConfigController widget allows selection of a save directory,
-    loading a JSON configuration file, and editing the configuration parameters in a table.
+    The ConfigController widget displays subject parameters loaded from the
+    experiment JSON and allows selection of the current subject.
     
     The object connects to the Micro-Manager Core object instances and the Config object.
     
@@ -79,13 +85,9 @@ class ConfigController(QWidget):
 
     Private Methods:
     ----------------
-    _select_directory(): 
-        opens a dialog to select a directory and update the GUI accordingly
-    _get_json_file_choices(): 
-        returns a list of JSON files in the current directory
-    _update_config(): 
-        updates the experiment configuration from a new JSON file
-    _test_led(): 
+    _load_subject():
+        updates the configuration form for the selected subject
+    _test_led():
         tests the LED pattern by sending a test sequence to the Arduino-Switch device
     _stop_led(): 
         stops the LED pattern by sending a stop sequence to the Arduino-Switch device
@@ -99,7 +101,7 @@ class ConfigController(QWidget):
     # ------------------------------------------------------------------------------------- #
     def __init__(self, procedure: 'Procedure'):
         super().__init__()
-        self.config = procedure.config 
+        self.config: ExperimentConfig = procedure.config #type: ignore
         self.procedure = procedure
 
         # Create main layout
@@ -107,38 +109,25 @@ class ConfigController(QWidget):
         self.setFixedWidth(500)
 
         # ==================================== GUI Widgets ===================================== #
-        # Button to open the BIDS directory in the system file explorer (hidden until a directory is picked)
+        # Button to open the BIDS directory in the system file explorer
         self.open_bids_button = QPushButton("Open BIDS Directory")
         layout.addWidget(self.open_bids_button)
         self.open_bids_button.setToolTip("Open the procedure.config.bids_dir in your file explorer")
+
+        # subject selection dropdown
+        self.subject_dropdown_label = QLabel('Select Subject:')
+        self.subject_dropdown = QComboBox()
+        sub_layout = QHBoxLayout()
+        sub_layout.addWidget(self.subject_dropdown_label)
+        sub_layout.addWidget(self.subject_dropdown)
+        layout.addLayout(sub_layout)
+
+        current_keys = list(self.config.subjects.get(self.config.get('subject'), {}).keys()) if hasattr(self.config, 'subjects') else None
+        self.config_model = ConfigFormWidget(self.procedure._config)#, keys=current_keys)
         
-        # 1. Selecting a save directory
-        self.directory_label = QLabel('Select Save Directory:')
-        self.directory_line_edit = QLineEdit()
-        self.directory_line_edit.setReadOnly(True)
-        self.directory_button = QPushButton('Browse')
-
-        dir_layout = QHBoxLayout()
-        dir_layout.addWidget(self.directory_label)
-        dir_layout.addWidget(self.directory_line_edit)
-        dir_layout.addWidget(self.directory_button)
-
-        layout.addLayout(dir_layout)
-
-        # 2. Dropdown Widget for JSON configuration files
-        self.json_dropdown_label = QLabel('Select JSON Config:')
-        self.json_dropdown = QComboBox()
-
-        json_layout = QHBoxLayout()
-        json_layout.addWidget(self.json_dropdown_label)
-        json_layout.addWidget(self.json_dropdown)
-
-        layout.addLayout(json_layout)
-
-        # 3. Table view to display the configuration parameters loaded from the JSON
-        self.config_model = ConfigFormWidget(self.procedure.config)
-        layout.addWidget(self.config_model)
-
+        self._populate_subjects()
+        self._change_subject(0)
+        
         # 4. Record button to start the MDA sequence
         self.record_button = QPushButton("Record")
 
@@ -180,8 +169,7 @@ class ConfigController(QWidget):
 
         # ============ Callback connections between widget values and functions ================ #
 
-        self.directory_button.clicked.connect(self._select_directory)
-        self.json_dropdown.currentIndexChanged.connect(self._update_config)
+        self.subject_dropdown.currentIndexChanged.connect(self._change_subject) # When the subject is changed, update the config form
         self.record_button.clicked.connect(self.record)
         self.add_note_button.clicked.connect(self._add_note)
         self.open_bids_button.clicked.connect(self._open_bids_directory)
@@ -224,13 +212,6 @@ class ConfigController(QWidget):
 
     #============================== Private Class Methods ==========================================#
 
-    def _select_directory(self):
-        """Open a dialog to select a directory and update the GUI accordingly."""
-        directory = QFileDialog.getExistingDirectory(self, "Select Save Directory")
-        if directory:
-            self.directory_line_edit.setText(directory)
-            self._get_json_file_choices(directory)
-
     def _open_bids_directory(self):
         """Open the BIDS directory in the system file explorer."""
         path = self.config.bids_dir
@@ -239,75 +220,31 @@ class ConfigController(QWidget):
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
-    def _get_json_file_choices(self, path):
-        """Return a list of JSON files in the current directory."""
-        import glob
-        self.config.save_dir = path
+    def _populate_subjects(self):
+        self.subject_dropdown.clear()
+        for sub in self.config.subjects.keys():
+            self.subject_dropdown.addItem(sub)
+
+    def _change_subject(self, index):
+        subject_id = self.subject_dropdown.currentText()
+        if not subject_id:
+            return
         try:
-            json_files = glob.glob(os.path.join(path, "*.json"))
-            self.json_dropdown.clear()
-            self.json_dropdown.addItems(json_files)
+            self.config.select_subject(subject_id)
         except Exception as e:
-            print(f"Error getting JSON files from directory: {path}\n{e}")
+            print(e)
+            return
 
-    def _update_config(self, index):
-        """Update the experiment configuration from a new JSON file."""
-        json_path_input = self.json_dropdown.currentText()
-
-        if json_path_input and os.path.isfile(json_path_input):
-            try:
-                self.procedure.setup_configuration(json_path_input)
-                # Rebuild table model to reflect new parameters
-                self.config_table_model = ConfigTableModel(self.config)
-                old_form = getattr(self, 'config_model', None)
-                new_form = ConfigFormWidget(self.config)
-                self.config_model = new_form
-                if old_form:
-                    layout = self.layout()
-                    idx = layout.indexOf(old_form)
-                    layout.insertWidget(idx, new_form)
-                    layout.removeWidget(old_form)
-                    old_form.deleteLater()
-            except Exception as e:
-                print(f"Trouble updating ExperimentConfig from AcquisitionEngine:\n{json_path_input}\nConfiguration not updated.")
-                print(e) 
-
-    def _save_snapshot(self, image: np.ndarray):
-        """Creates a PyQt popup window for saving the snapped image."""
-        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-        from matplotlib.figure import Figure
-
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Save Snapped Image")
-        layout = QVBoxLayout(dialog)
-
-        fig = Figure()
-        canvas = FigureCanvas(fig)
-        ax = fig.add_subplot(111)
-        ax.imshow(image, cmap='gray')
-        layout.addWidget(canvas)
-        
-        # Save button
-        save_button = QPushButton("Save", dialog)
-        layout.addWidget(save_button)
-
-        save_button.clicked.connect(lambda: self._save_image(image, dialog))
-
-        dialog.exec()
-
-    def _save_image(self, image: np.ndarray, dialog: QDialog):
-        """Save the snapped image to the specified directory with a unique filename."""
-
-        # Generate a unique filename with a timestamp
-        file_path = self.config.make_path(suffix="snapped", extension="png", bids_type="func")
-
-        # Save the image as a PNG file using matplotlib
-        import matplotlib.pyplot as plt
-
-        plt.imsave(file_path, image, cmap='gray')
-
-        # Close the dialog
-        dialog.accept()
+        keys = list(self.config.subjects[subject_id].keys())
+        old_form = getattr(self, 'config_model', None)
+        new_form = ConfigFormWidget(self.config)#, keys=keys)
+        self.config_model = new_form
+        if old_form:
+            layout = self.layout()
+            idx = layout.indexOf(old_form)
+            layout.insertWidget(idx, new_form)
+            layout.removeWidget(old_form)
+            old_form.deleteLater()
 
     def _test_led(self):
         """

@@ -121,6 +121,8 @@ class ExperimentConfig(ConfigRegister):
         self._json_file_path = ''
         self._save_dir = ''
         self._parameters: dict = {}  # NOTE: For backward compatibility
+        self.subjects: Dict[str, Dict[str, Any]] = {}
+        self.selected_subject: str | None = None
 
         # Register common configuration parameters with defaults and types
         self._register_default_parameters()
@@ -144,7 +146,6 @@ class ExperimentConfig(ConfigRegister):
         self.register("start_on_trigger", False, bool, "Whether to start acquisition on trigger", "hardware")
         self.register("duration", 60, int, "Sequence duration in seconds", "experiment")
         self.register("trial_duration", None, int, "Trial duration in seconds", "experiment")
-        self.register("led_pattern", ['4', '4'], list, "LED pattern sequence", "hardware")
         self.register("psychopy_filename", "experiment.py", str, "PsychoPy experiment filename", "experiment")
 
     @property
@@ -243,11 +244,6 @@ class ExperimentConfig(ConfigRegister):
     @property
     def psychopy_filename(self) -> str:
         """Get the PsychoPy experiment filename."""
-        # py_files = list(pathlib.Path(self._save_dir).glob('*.py'))
-        # if py_files:
-        #     return py_files[0].name
-        # else:
-        #     warnings.warn(f'No Psychopy experiment file found in directory {pathlib.Path(self.save_dir).parent}.')
         return self.get("psychopy_filename", self._parameters.get('psychopy_filename', 'experiment.py'))
 
     @property
@@ -323,22 +319,40 @@ class ExperimentConfig(ConfigRegister):
         self.logger.info(f"Loading configuration from: {file_path}")
         try:
             with open(file_path, 'r') as f:
-                self._parameters = json.load(f)
-            self.logger.info(f"Successfully loaded {len(self._parameters)} parameters from JSON")
+                data = json.load(f)
+            self.logger.info("Successfully loaded configuration JSON")
         except FileNotFoundError:
             self.logger.error(f"Configuration file not found: {file_path}")
-            return 
+            return
         except json.JSONDecodeError as e:
             self.logger.error(f"Error decoding JSON from {file_path}: {e}")
             return
-            
-        self._json_file_path = file_path #store the json filepath
-        #TODO: set output_paths for all devices using the `make_path` method 
 
-        # Update the registry and legacy parameters
-        for key, value in self._parameters.items():
-            self.set(key, value)
-            self._parameters[key] = value  # NOTE: For backward compatibility
+        self._json_file_path = file_path #store the json filepath
+        # Detect new style JSON with 'Configuration' and 'Subjects'
+        self.subjects = {}
+
+        if "Configuration" in data and "Subjects" in data:
+            config_params = data.get("Configuration", {})
+            self._parameters = config_params.copy()
+            for key, value in config_params.items():
+                self.set(key, value)
+            if config_params.get("experiment_directory"):
+                self.save_dir = config_params.get("experiment_directory")
+            # We can register a parameter as a list, and the `ConfigFormWidget` will handle it as a dropdown
+            # if config_params.get("task"):
+            #     self.register_parameter("task", config_params.get("task"), list, "Task identifier", "experiment")
+            #     # set the first task in the list as task
+            #     self.set("task", config_params.get("task")[0])
+            self.subjects = data.get("Subjects", {})
+            if self.subjects:
+                first = next(iter(self.subjects.keys()))
+                self.select_subject(first)
+        else:
+            # legacy flat structure
+            self._parameters = data
+            for key, value in data.items():
+                self.set(key, value)
                     
         
     def register_parameter(self, key, default=None, type_hint=None, description="", category="general"):
@@ -354,4 +368,49 @@ class ExperimentConfig(ConfigRegister):
         self.register(key, default, type_hint, description, category)
         if default is not None:
             self._parameters[key] = default  # For backward compatibility
+
+    def auto_increment_session(self) -> None:
+        """Increment the session number in the config and persist it to the JSON file."""
+        # get current session number
+        curr = int(self.session)
+        next_num = curr + 1
+        session_str = f"{next_num:02d}"
+
+        # update in-memory config
+        self.set("session", session_str)
+
+        # persist back to the JSON file if available
+        path = getattr(self, "_json_file_path", "")
+        if path and os.path.isfile(path):
+            try:
+                with open(path, "r") as f:
+                    data = json.load(f)
+
+                # new-style JSON
+                if "Subjects" in data and self.selected_subject in data["Subjects"]:
+                    data["Subjects"][self.selected_subject]["session"] = session_str
+                # configuration block
+                elif "Configuration" in data:
+                    data["Configuration"]["session"] = session_str
+                # legacy flat structure
+                else:
+                    data["session"] = session_str
+
+                with open(path, "w") as f:
+                    json.dump(data, f, indent=4)
+            except Exception as e:
+                self.logger.error(f"Failed to update session in JSON file: {e}")
+        else:
+            self.logger.warning("No JSON file to update; _json_file_path not set or file missing")
+
+    def select_subject(self, subject_id: str) -> None:
+        """Apply subject-specific parameters from ``self.subjects``."""
+        subj = self.subjects.get(subject_id)
+        if not subj:
+            raise ValueError(f"Subject {subject_id} not found")
+        self.selected_subject = subject_id
+        self.set("subject", subject_id)
+        for key, val in subj.items():
+            self.set(key, val)
+            self._parameters[key] = val
 

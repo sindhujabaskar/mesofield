@@ -13,15 +13,6 @@ os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
 # Disable ipykernel logger
 logging.getLogger("ipykernel.inprocess.ipkernel").setLevel(logging.WARNING)
 
-def get_experimental_summary(experiment_dir):
-    import mesofield.data.proc.load as load
-    datadict =  load.file_hierarchy(experiment_dir)
-    load.experiment_progress_summary(datadict)
-
-def get_file_hierarchy_object(experiment_dir):
-    import mesofield.data.proc.load as load
-    return load.file_hierarchy(experiment_dir)
-
 
 '''
 ================================== Command Line Interface ======================================
@@ -49,11 +40,11 @@ def cli():
 
 
 @cli.command()
-@click.option('--params', default='dev.yaml', help='Path to the config file')
-@click.option('--procedure-config', default=None, help='Path to procedure-specific configuration file')
-@click.option('--experiment-id', default='default', help='Unique identifier for the experiment')
-@click.option('--experimentor', default='researcher', help='Name of the person running the experiment')
-def launch(params, procedure_config, experiment_id, experimentor):
+@click.option('--config', required=True, help='Path to experiment JSON configuration')
+def launch(config):
+    import json
+    import time
+    
     from PyQt6.QtWidgets import QApplication, QSplashScreen
     from PyQt6.QtGui import QPixmap, QPainter, QFont
     from PyQt6.QtCore import Qt
@@ -61,21 +52,20 @@ def launch(params, procedure_config, experiment_id, experimentor):
     
     from mesofield.gui.maingui import MainWindow
     from mesofield.base import Procedure, create_procedure
-    from mesofield.config import ExperimentConfig
     
     app = QApplication([])
 
-    # config = ExperimentConfig(params)
-    # config.hardware._configure_engines(config)
-        # 1) If you have a PNG:
+
+    # PNG:
     # pixmap = QPixmap(r'mesofield\gui\Mesofield_icon.png')
     # pixmap = pixmap.scaled(500, 500, Qt.KeepAspectRatio, Qt.SmoothTransformation)
     # splash = QSplashScreen(pixmap)
     #splash.setFixedSize(500, 500)
-    
+
+# ====================== Splash Screen with ASCII Art ========================= """
+
 # Font: Sub-Zero; character width: Full, Character Height: Fitted
 # https://patorjk.com/software/taag/#p=display&h=0&v=1&f=Sub-Zero&t=Mesofield
-    """Launch the mesofield acquisition interface."""
     ascii = r"""
  __    __     ______     ______     ______     ______   __     ______     __         _____    
 /\ "-./  \   /\  ___\   /\  ___\   /\  __ \   /\  ___\ /\ \   /\  ___\   /\ \       /\  __-.  
@@ -112,14 +102,27 @@ def launch(params, procedure_config, experiment_id, experimentor):
 
     splash.show()
     app.processEvents()  # ensure the splash appears
-    import time
-    time.sleep(5)
+
+    #TODO put this somewhere it belongs 
+# ====================== End of Splash Screen logic ========================= '''
+    # Load the configuration file
+    with open(config, 'r') as f:
+        cfg_json = json.load(f)
+
+    cfg = cfg_json.get('Configuration', {})
+    hardware_yaml = cfg.get('hardware_config_file', 'hardware.yaml')
+    data_dir = cfg.get('experiment_directory', '.')
+    experiment_id = cfg.get('protocol', 'experiment')
+    experimentor = cfg.get('experimenter', 'researcher')
+
+    time.sleep(2) #give the splash screen a moment to show :)
     procedure = create_procedure(
         Procedure,
         experiment_id=experiment_id,
         experimentor=experimentor,
-        hardware_yaml=params,
-        json_config=procedure_config
+        hardware_yaml=hardware_yaml,
+        data_dir=data_dir,
+        json_config=config
     )
     
     mesofield = MainWindow(procedure)

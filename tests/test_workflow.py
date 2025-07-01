@@ -151,7 +151,28 @@ def test_procedure_workflow(tmp_path, monkeypatch):
     )
 
     cfg_json = tmp_path / "config.json"
-    json.dump({"subject": "01", "session": "02", "task": "wf", "duration": 1}, cfg_json.open("w"))
+    json.dump({
+        "Configuration": {
+            "experimenter": "tester",
+            "protocol": "exp1",
+            "experiment_directory": str(tmp_path),
+            "hardware_config_file": str(hw_path),
+            "database_path": str(tmp_path / "db.h5"),
+            "duration": 1,
+            "start_on_trigger": False,
+            "led_pattern": ["4", "4"]
+        },
+        "Subjects": {
+            "SUBJ1": {
+                "sex": "F",
+                "genotype": "test",
+                "DOB": "2024-01-01",
+                "DOS": "2024-01-02",
+                "session": "01",
+                "task": "wf"
+            }
+        }
+    }, cfg_json.open("w"))
 
     pcfg = ProcedureConfig(
         experiment_id="exp1",
@@ -164,7 +185,6 @@ def test_procedure_workflow(tmp_path, monkeypatch):
     proc = DummyProcedure(pcfg)
 
     # configuration loaded
-    assert proc.config.subject == "01"
     assert len(proc.hardware.devices) == 2
     assert isinstance(proc.data, DataManager)
 
@@ -179,7 +199,7 @@ def test_procedure_workflow(tmp_path, monkeypatch):
     assert Path(paths.writers["cam1"]).exists()
     assert Path(paths.queue).exists()
 
-    db = proc.data.database
+    db = proc.data.base
     assert db and db.path.exists()
     df = db.read("datapaths")
     assert isinstance(df, pd.DataFrame) and not df.empty
