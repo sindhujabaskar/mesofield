@@ -29,6 +29,8 @@ Usage Example:
     
     # Run until interrupted...
 """
+from typing import Any, Callable, ClassVar, Dict, List
+
 import serial
 import time
 import logging
@@ -51,7 +53,21 @@ class EncoderData:
 
 from mesofield import DeviceRegistry
 
+class Event:
+    """Simple event handler carrying (payload, device_ts)."""
+    def __init__(self):
+        self._callbacks: List[Callable[[Any, Any], None]] = []
 
+    def connect(self, callback: Callable[[Any, Any], None]):
+        self._callbacks.append(callback)
+
+    def emit(self, payload=None, device_ts=None):
+        for cb in self._callbacks:
+            try:
+                cb(payload, device_ts)
+            except Exception:
+                pass
+            
 @DeviceRegistry.register("encoder")
 class EncoderSerialInterface(QThread):
     
@@ -60,10 +76,12 @@ class EncoderSerialInterface(QThread):
     serialStreamStopped = pyqtSignal()         # Emits when streaming stops
     serialSpeedUpdated = pyqtSignal(float, float)  # Emits elapsed time and current speed
     device_id: str = "treadmill"  # Default device ID, can be overridden
+    device_type: ClassVar[str] = "encoder"
     file_type: str = "csv"
     bids_type: Optional[str] = "beh"
     _started: datetime  # Timestamp when the interface started
     _stopped: datetime # Timestamp when the interface stopped
+    data_event = Event()
     
     def __init__(self, port: str, baudrate: int = 192000):
         super().__init__()
@@ -83,7 +101,7 @@ class EncoderSerialInterface(QThread):
 
         self.logger.info(f"EncoderSerialInterface initialized on port {port} with baudrate {baudrate}")
 
-    def start_recording(self, file_path: str):
+    def start_recording(self, file_path: Optional[str] = None):
         self._recording = True
         self._started = datetime.now()
         if not self.isRunning():
@@ -105,6 +123,7 @@ class EncoderSerialInterface(QThread):
     def stop(self):
         if self._recording:
             self._recording = False
+            self._stopped = datetime.now()
             #self.session_data = list(self.session_data)
         else:
             self.logger.warning("Recording not active; nothing to stop.")
@@ -120,7 +139,8 @@ class EncoderSerialInterface(QThread):
                 if line:
                     data = self._parse_line(line)
                     if data:
-                        self.serialDataReceived.emit(data.timestamp)
+                        #self.serialDataReceived.emit(data.timestamp)
+                        self.data_event.emit(data, datetime.now()) # this will fo to the DataManager.DataQueue
                         self.serialSpeedUpdated.emit(data.timestamp or 0, data.speed)
                         # Record data if recording is active.
                         if self._recording:
@@ -149,7 +169,7 @@ class EncoderSerialInterface(QThread):
             for data in self.session_data:
                 writer.writerow([data.timestamp, data.distance, data.speed])
         
-        self.logger.info(f"Recorded data saved to {self.output_path}")
+        #self.logger.info(f"Recorded data saved to {self.output_path}")
 
     def get_data(self) -> list[EncoderData]:
         """
