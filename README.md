@@ -9,12 +9,12 @@ full production package.
 
 ## Overview
 
-Experiments are driven by :class:`mesofield.base.Procedure`.  Each procedure
-owns a configuration object, :class:`~mesofield.config.ExperimentConfig`, which
-loads the ``hardware.yaml`` via :class:`mesofield.hardware.HardwareManager`.
+Experiments are driven by `mesofield.base.Procedure`.  Each procedure
+owns a configuration object, `~mesofield.config.ExperimentConfig`, which
+loads the ``hardware.yaml`` via `mesofield.hardware.HardwareManager`.
 This registry stores parameters such as ``subject``, ``session`` and user-definable 
 parameters stored and loaded via JSON.  GUI widgets like
-:class:`mesofield.gui.controller.ConfigController` expose these values for
+`mesofield.gui.controller.ConfigController` expose these values for
 interactive editing.
 
 Main components:
@@ -32,12 +32,78 @@ Main components:
 
 Mesofield uses PyQt6 and has only been tested on various Windows 10/11.
 Multi-camera setups prodcuing large experimental files require modern
-computing hardware. I reccommend having at least 32gb RAM and a 12th
+computing hardware. I recommend having at least 32gb RAM and a 12th
 generation i7 core or equivalent.
 
 An attemp tat universal logging and exception handling has been made;
 all logs and uncaught exceptions are written to `logs/mesofield.log`
 using a standardized logger.
+
+## Development Setup
+
+```bash
+conda create -n mesofield python=3.13
+conda activate mesofield
+pip install -r requirements.txt
+```
+
+## Launch from JSON Configuration
+
+In your terminal, launch Mesofield like so:
+
+```python
+python -m mesofield launch --config "path/to/json_config"
+```
+
+Below is a sample config. The Subjects section is vital,
+Mesofield uses this information to build a BIDS-compliant
+directory. Also vital (like any good config) are the paths
+in the Configuration section:
+
+```json
+{
+    "Configuration": {
+        "experimenter": "you",
+        "protocol": "HFSA",
+        "experiment_directory": "/where/mesofield/builds_outputs",
+        "hardware_config_file": "path/to/hardware.yaml",
+        "database_path": "where/mesofield/builds_h5_database/database.h5",
+        "duration": 1000,
+    },
+    "Subjects": {
+        "STREHAB07": {
+            "sex": "F",
+            "session": "01",
+            "task": "mesoscope"
+        },
+        "STREHAB09": {
+            "sex": "M",
+            "session": "01",
+            "task": "mesoscope"
+        }
+    },
+    "DisplayKeys": [
+        "subject",
+        "session",
+        "task",
+        "experimenter",
+        "protocol",
+        "duration",
+        "start_on_trigger",
+        "led_pattern"
+    ]
+}
+```
+
+The `ConfigController` uses the `DisplayKeys` list, when present,
+to load and display in the `ConfigFormWidget`.  Only these values
+are written back to the JSON file when a `Procedure` finishes.
+
+Running a procedure will persist any modified configuration values back to
+the JSON file, keeping it in sync with the session counter and other fields.
+
+Mesofield supports adding as many parameters as you want, which will
+get saved back to the JSON, and used as you so please.
 
 ## Custom Hardware
 
@@ -92,20 +158,6 @@ class ThreadedDevice(ThreadingHardwareDeviceMixin):
 
 Asynchronous devices can be implemented with `asyncio` while still
 providing the protocol methods.
-
-## Development Setup
-
-```bash
-conda create -n mesofield python=3.13
-conda activate mesofield
-pip install -r requirements.txt
-```
-
-Launch the GUI with simulated hardware:
-
-```bash
-python -m mesofield launch --dev True
-```
 
 ## Using the Console
 

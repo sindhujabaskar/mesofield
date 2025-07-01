@@ -25,16 +25,19 @@ from mesofield.config import ExperimentConfig
 from mesofield.protocols import Procedure
 
 class MainWindow(QMainWindow):
-    def __init__(self, procedure: Procedure):
+    def __init__(self, procedure: Procedure, display_keys=None):
         super().__init__()
         #self.config: ExperimentConfig = cast(ExperimentConfig, procedure.config)
         self.procedure = procedure
+        if display_keys is None and hasattr(self.procedure.config, "display_keys"):
+            display_keys = self.procedure.config.display_keys
+        self.display_keys = list(display_keys) if display_keys is not None else None
         window_icon = QIcon(os.path.join(os.path.dirname(__file__), "Mesofield_icon.png"))
         self.setWindowIcon(window_icon)        
         self.setWindowTitle("Mesofield")
         #============================== Widgets =============================#
         self.acquisition_gui = MDA(self.procedure.config)
-        self.config_controller = ConfigController(self.procedure)
+        self.config_controller = ConfigController(self.procedure, display_keys=self.display_keys)
         self.encoder_widget = EncoderWidget(self.procedure.config)
         self.initialize_console(self.procedure) # Initialize the IPython console
         #--------------------------------------------------------------------#

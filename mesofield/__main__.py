@@ -110,6 +110,7 @@ def launch(config):
         cfg_json = json.load(f)
 
     cfg = cfg_json.get('Configuration', {})
+    display_keys = cfg_json.get('DisplayKeys')
     hardware_yaml = cfg.get('hardware_config_file', 'hardware.yaml')
     data_dir = cfg.get('experiment_directory', '.')
     experiment_id = cfg.get('protocol', 'experiment')
@@ -125,7 +126,7 @@ def launch(config):
         json_config=config
     )
     
-    mesofield = MainWindow(procedure)
+    mesofield = MainWindow(procedure, display_keys=display_keys)
     mesofield.show()
     splash.finish(mesofield)
     app.exec()

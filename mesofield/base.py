@@ -158,7 +158,6 @@ class Procedure:
 
     # ------------------------------------------------------------------
     def save_data(self) -> None:
-        self.config.auto_increment_session()
         mgr = getattr(self, "data_manager", self.data)
         self.hardware.cameras[1].core.stopSequenceAcquisition() #type: ignore
         for cam in self.hardware.cameras:
@@ -168,6 +167,9 @@ class Procedure:
         mgr.save.all_hardware()
         mgr.save.save_timestamps(self.experiment_id, self.start_time, self.stopped_time)
         mgr.update_database()
+        #self.config.auto_increment_session()
+        # persist any modified configuration values back to the JSON file
+        self.config.save_json()
         self.logger.info("Data saved successfully")
 
 

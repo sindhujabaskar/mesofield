@@ -122,6 +122,7 @@ class ExperimentConfig(ConfigRegister):
         self._save_dir = ''
         self.subjects: Dict[str, Dict[str, Any]] = {}
         self.selected_subject: str | None = None
+        self.display_keys: List[str] | None = None
 
         # Register common configuration parameters with defaults and types
         self._register_default_parameters()
@@ -325,6 +326,7 @@ class ExperimentConfig(ConfigRegister):
             return
 
         self._json_file_path = file_path #store the json filepath
+        self.display_keys = data.get("DisplayKeys")
         # Detect new style JSON with 'Configuration' and 'Subjects'
         self.subjects = {}
 
@@ -393,6 +395,47 @@ class ExperimentConfig(ConfigRegister):
                 self.logger.error(f"Failed to update session in JSON file: {e}")
         else:
             self.logger.warning("No JSON file to update; _json_file_path not set or file missing")
+
+    def save_json(self, path: Optional[str] = None) -> None:
+        """Persist displayed configuration values back to the JSON file."""
+        path = path or getattr(self, "_json_file_path", "")
+        if not path or not os.path.isfile(path):
+            self.logger.warning("No JSON file to update; _json_file_path not set or file missing")
+            return
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+
+            display = self.display_keys or []
+            subject_vals = data.get("Subjects", {}).get(self.selected_subject, {})
+
+            if "Configuration" in data:
+                cfg_block = data.get("Configuration", {})
+                for k in display:
+                    if k in subject_vals:
+                        continue  # subject-specific key
+                    if k in cfg_block:
+                        cfg_block[k] = self.get(k)
+                data["Configuration"] = cfg_block
+            else:
+                for k in display:
+                    if k in subject_vals:
+                        continue
+                    if k in data:
+                        data[k] = self.get(k)
+
+            if subject_vals:
+                for k in display:
+                    if k in subject_vals and self.has(k):
+                        subject_vals[k] = self.get(k)
+                if "Subjects" not in data:
+                    data["Subjects"] = {}
+                data["Subjects"][self.selected_subject] = subject_vals
+
+            with open(path, "w") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            self.logger.error(f"Failed to update configuration JSON: {e}")
 
     def select_subject(self, subject_id: str) -> None:
         """Apply subject-specific parameters from ``self.subjects``."""

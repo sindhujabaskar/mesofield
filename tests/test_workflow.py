@@ -171,7 +171,8 @@ def test_procedure_workflow(tmp_path, monkeypatch):
                 "session": "01",
                 "task": "wf"
             }
-        }
+        },
+        "DisplayKeys": ["duration", "start_on_trigger", "task", "session"]
     }, cfg_json.open("w"))
 
     pcfg = ProcedureConfig(
@@ -203,3 +204,10 @@ def test_procedure_workflow(tmp_path, monkeypatch):
     assert db and db.path.exists()
     df = db.read("datapaths")
     assert isinstance(df, pd.DataFrame) and not df.empty
+
+    # configuration JSON updated with incremented session
+    with open(cfg_json) as f:
+        data = json.load(f)
+    assert data["Subjects"]["SUBJ1"]["session"] == "02"
+    # subject-only keys should not be written to the Configuration block
+    assert "sex" not in data["Configuration"]

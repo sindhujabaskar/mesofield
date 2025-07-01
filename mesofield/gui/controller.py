@@ -37,14 +37,16 @@ from .dynamic_controller import DynamicController
 
 class ConfigFormWidget(QWidget):
     """Map each config key to an appropriate editor in a form layout."""
+
     def __init__(self, registry, keys=None):
         super().__init__()
         self._registry = registry
         form = QFormLayout(self)
         if keys is None:
             keys = self._registry.keys()
+        self._keys = list(keys)
         # create editor per config key with initial values and two-way binding
-        for key in keys:
+        for key in self._keys:
             type_hint = self._registry.get_metadata(key).get("type")
             value = self._registry.get(key)
             if type_hint is int:
@@ -65,6 +67,11 @@ class ConfigFormWidget(QWidget):
                 editor.setText(str(value))
                 editor.textChanged.connect(lambda text, k=key: self._registry.set(k, text))
             form.addRow(key, editor)
+
+    @property
+    def keys(self):
+        """Return the list of registry keys displayed in the form."""
+        return list(self._keys)
 
 
 class ConfigController(QWidget):
@@ -99,10 +106,13 @@ class ConfigController(QWidget):
     configUpdated = pyqtSignal(object)
     recordStarted = pyqtSignal(str)
     # ------------------------------------------------------------------------------------- #
-    def __init__(self, procedure: 'Procedure'):
+    def __init__(self, procedure: 'Procedure', display_keys=None):
         super().__init__()
         self.config: ExperimentConfig = procedure.config #type: ignore
         self.procedure = procedure
+        if display_keys is None and hasattr(self.config, "display_keys"):
+            display_keys = self.config.display_keys
+        self.display_keys = list(display_keys) if display_keys is not None else None
 
         # Create main layout
         layout = QVBoxLayout(self)
@@ -122,8 +132,7 @@ class ConfigController(QWidget):
         sub_layout.addWidget(self.subject_dropdown)
         layout.addLayout(sub_layout)
 
-        current_keys = list(self.config.subjects.get(self.config.get('subject'), {}).keys()) if hasattr(self.config, 'subjects') else None
-        self.config_model = ConfigFormWidget(self.procedure._config)#, keys=current_keys)
+        self.config_model = ConfigFormWidget(self.procedure.config, keys=self.display_keys)
         
         self._populate_subjects()
         self._change_subject(0)
@@ -187,6 +196,26 @@ class ConfigController(QWidget):
                 getattr(self.dynamic_controller, btn_attr).clicked.connect(handler)
 
         # ------------------------------------------------------------------------------------- #
+    # ------------------------------- Introspection Helpers --------------------------- #
+    def displayed_values(self) -> dict:
+        """Return the configuration values currently shown in the form widget."""
+        if not hasattr(self, "config_model"):
+            return {}
+        return {k: self.config.get(k) for k in self.config_model.keys}
+
+    def set_display_keys(self, keys=None):
+        """Set which configuration keys should be displayed in the form."""
+        self.display_keys = list(keys) if keys is not None else None
+        old_form = getattr(self, 'config_model', None)
+        if old_form:
+            new_form = ConfigFormWidget(self.config, keys=self.display_keys)
+            self.config_model = new_form
+            layout = self.layout()
+            idx = layout.indexOf(old_form)
+            layout.insertWidget(idx, new_form)
+            layout.removeWidget(old_form)
+            old_form.deleteLater()
+
 
     # ============================== Public Class Methods ============================================ #
 
@@ -235,9 +264,8 @@ class ConfigController(QWidget):
             print(e)
             return
 
-        keys = list(self.config.subjects[subject_id].keys())
         old_form = getattr(self, 'config_model', None)
-        new_form = ConfigFormWidget(self.config)#, keys=keys)
+        new_form = ConfigFormWidget(self.config, keys=self.display_keys)
         self.config_model = new_form
         if old_form:
             layout = self.layout()
