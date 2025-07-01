@@ -58,12 +58,12 @@ class Procedure:
         self.h5_path = os.path.join(self.data_dir, f"{self.experiment_id}.h5")
 
         # Initialize configuration and apply custom parameters
-        self._config = ExperimentConfig(self.hardware_yaml)
+        self.config = ExperimentConfig(self.hardware_yaml)
         for key, value in procedure_config.custom_parameters.items():
-            self._config.set(key, value)
+            self.config.set(key, value)
 
-        self._config.set("experiment_id", self.experiment_id)
-        self._config.set("experimentor", self.experimentor)
+        self.config.set("experiment_id", self.experiment_id)
+        self.config.set("experimentor", self.experimentor)
 
         self.logger = get_logger(f"PROCEDURE.{self.experiment_id}")
         self.logger.info(f"Initialized procedure: {self.experiment_id}")
@@ -73,13 +73,10 @@ class Procedure:
             self.setup_configuration(procedure_config.json_config)
     # ------------------------------------------------------------------
     # Convenience accessors
-    @property
-    def config(self) -> ExperimentConfig:
-        return self._config
 
     @property
     def hardware(self) -> HardwareManager:
-        return self._config.hardware
+        return self.config.hardware
     
     # ------------------------------------------------------------------
     # Core business logic
@@ -97,11 +94,8 @@ class Procedure:
         The `DataManager` singleton is initialized here, too, as an attribute of the `Procedure` instance. 
         """
         try:
-            if hasattr(self._config.hardware, "initialize"):
-                self._config.hardware.initialize(self._config)
-
+            self.config.hardware.initialize(self.config)
             self.data = DataManager()
-
             self.logger.info("Hardware initialized successfully")
             
         except RuntimeError as e:  # pragma: no cover - initialization failures
@@ -119,22 +113,23 @@ class Procedure:
         is aware of the new configuration and can set up the data storage accordingly.
         """
         if json_config:
-            self._config.load_json(json_config)
-            self._config.hardware._configure_engines(self._config)
-        
-        
+            self.config.load_json(json_config)
+            self.config.hardware._configure_engines(self.config)
 
     # ------------------------------------------------------------------
     
     def prerun(self) -> None:
         """Run any pre-experiment setup logic."""
         self.logger.info("Running pre-experiment setup")
+
         self.data.setup(
-            self._config,
-            os.path.join(self._config.save_dir, f"{self.experiment_id}.h5"),
-            self._config.hardware.devices.values(),
+            self.config,
+            os.path.join(self.config.save_dir, f"{self.experiment_id}.h5"),
+            self.config.hardware.devices.values(),
         )
+
         self.data.start_queue_logger()
+
         for cam in self.hardware.cameras:
             cam.set_writer(self.config.make_path)
             cam.set_sequence(self.config.build_sequence)
@@ -149,7 +144,7 @@ class Procedure:
         try:
             self.hardware.cameras[0].core.mda.events.sequenceFinished.connect(self._cleanup_procedure) #type: ignore
 
-            if self._config.get("start_on_trigger", False):
+            if self.config.get("start_on_trigger", False):
                 self.psychopy_process = self._launch_psychopy()
                 self.psychopy_process.start()
 
@@ -179,13 +174,13 @@ class Procedure:
     # ------------------------------------------------------------------
     def _launch_psychopy(self):
         from mesofield.subprocesses.psychopy import PsychoPyProcess
-        return PsychoPyProcess(self._config)
+        return PsychoPyProcess(self.config)
 
 
     def _cleanup_procedure(self):
         self.logger.info("Cleanup Procedure")
         try:
-            #self.hardware.cameras[1].core.stopSequenceAcquisition()
+            self.hardware.cameras[1].core.stopSequenceAcquisition()
             self.hardware.cameras[0].core.mda.events.sequenceFinished.disconnect(self._cleanup_procedure)
             self.hardware.stop()
             self.data.stop_queue_logger()
@@ -200,7 +195,7 @@ class Procedure:
 
     def add_note(self, note: str) -> None:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self._config.notes.append(f"{timestamp}: {note}")
+        self.config.notes.append(f"{timestamp}: {note}")
         self.logger.info(f"Added note: {note}")
 
     def load_database(self, key: str = "datapaths"):
