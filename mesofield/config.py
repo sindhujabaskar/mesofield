@@ -120,7 +120,6 @@ class ExperimentConfig(ConfigRegister):
         # Initialize the configuration registry
         self._json_file_path = ''
         self._save_dir = ''
-        self._parameters: dict = {}  # NOTE: For backward compatibility
         self.subjects: Dict[str, Dict[str, Any]] = {}
         self.selected_subject: str | None = None
 
@@ -169,37 +168,38 @@ class ExperimentConfig(ConfigRegister):
     @property
     def subject(self) -> str:
         """Get the subject ID."""
-        return self.get("subject", self._parameters.get('subject', 'sub'))
+        return self.get("subject")
 
     @property
     def session(self) -> str:
         """Get the session ID."""
-        return self.get("session", self._parameters.get('session', 'ses'))
+        return self.get("session")
 
     @property
     def task(self) -> str:
         """Get the task ID."""
-        return self.get("task", self._parameters.get('task', 'task'))
+        return self.get("task")
 
     @property
     def start_on_trigger(self) -> bool:
         """Get whether to start on trigger."""
-        return self.get("start_on_trigger", self._parameters.get('start_on_trigger', False))
+        return self.get("start_on_trigger")
     
     @property
     def sequence_duration(self) -> int:
         """Get the sequence duration in seconds."""
-        return int(self.get("duration", self._parameters.get('duration', 60)))
+        return int(self.get("duration"))
     
     @property
     def trial_duration(self) -> int:
         """Get the trial duration in seconds."""
-        return int(self.get("trial_duration", self._parameters.get('trial_duration', None)))
+        trial_dur = self.get("trial_duration")
+        return int(trial_dur) if trial_dur is not None else None
         
     @property
     def num_trials(self) -> int:
         """Calculate the number of trials."""
-        return int(self.get("num_trials", self._parameters.get('num_trials', 1)))
+        return int(self.get("num_trials", 1))
     
     
     def build_sequence(self, camera: DataProducer) -> useq.MDASequence:
@@ -233,10 +233,7 @@ class ExperimentConfig(ConfigRegister):
     @property
     def dataframe(self):
         """Convert parameters to a pandas DataFrame."""
-        # Combine registry and legacy parameters
         combined_params = self.items()
-        combined_params.update(self._parameters)
-        
         data = {'Parameter': list(combined_params.keys()),
                 'Value': list(combined_params.values())}
         return pd.DataFrame(data)
@@ -244,7 +241,7 @@ class ExperimentConfig(ConfigRegister):
     @property
     def psychopy_filename(self) -> str:
         """Get the PsychoPy experiment filename."""
-        return self.get("psychopy_filename", self._parameters.get('psychopy_filename', 'experiment.py'))
+        return self.get("psychopy_filename")
 
     @property
     def psychopy_path(self) -> str:
@@ -270,7 +267,7 @@ class ExperimentConfig(ConfigRegister):
     @property
     def led_pattern(self) -> list[str]:
         """Get the LED pattern."""
-        return self.get("led_pattern", self._parameters.get('led_pattern', ['4', '4', '2', '2']))
+        return self.get("led_pattern")
     
     @led_pattern.setter
     def led_pattern(self, value: list) -> None:
@@ -282,7 +279,6 @@ class ExperimentConfig(ConfigRegister):
         if isinstance(value, list):
             value_str = [str(item) for item in value]
             self.set("led_pattern", value_str)
-            self._parameters['led_pattern'] = value_str  # For backward compatibility
         else:
             raise ValueError("led_pattern must be a list or a JSON string representing a list")
     
@@ -334,7 +330,6 @@ class ExperimentConfig(ConfigRegister):
 
         if "Configuration" in data and "Subjects" in data:
             config_params = data.get("Configuration", {})
-            self._parameters = config_params.copy()
             for key, value in config_params.items():
                 self.set(key, value)
             if config_params.get("experiment_directory"):
@@ -350,11 +345,9 @@ class ExperimentConfig(ConfigRegister):
                 self.select_subject(first)
         else:
             # legacy flat structure
-            self._parameters = data
             for key, value in data.items():
                 self.set(key, value)
-                    
-        
+
     def register_parameter(self, key, default=None, type_hint=None, description="", category="general"):
         """Register a new parameter with metadata.
         
@@ -366,8 +359,6 @@ class ExperimentConfig(ConfigRegister):
             category: Category for the parameter
         """
         self.register(key, default, type_hint, description, category)
-        if default is not None:
-            self._parameters[key] = default  # For backward compatibility
 
     def auto_increment_session(self) -> None:
         """Increment the session number in the config and persist it to the JSON file."""
@@ -411,6 +402,11 @@ class ExperimentConfig(ConfigRegister):
         self.selected_subject = subject_id
         self.set("subject", subject_id)
         for key, val in subj.items():
-            self.set(key, val)
-            self._parameters[key] = val
+            try:
+                self.set(key, val)
+            except Exception as e:
+                self.logger.error(f"Failed to update session in JSON file: {e}")
+        else:
+            self.logger.warning("No JSON file to update; _json_file_path not set or file missing")
+
 
