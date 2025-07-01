@@ -1,9 +1,16 @@
-# Mesofield
+```
+ __    __     ______     ______     ______     ______   __     ______     __         _____    
+/\ "-./  \   /\  ___\   /\  ___\   /\  __ \   /\  ___\ /\ \   /\  ___\   /\ \       /\  __-.  
+\ \ \-./\ \  \ \  __\   \ \___  \  \ \ \/\ \  \ \  __\ \ \ \  \ \  __\   \ \ \____  \ \ \/\ \ 
+ \ \_\ \ \_\  \ \_____\  \/\_____\  \ \_____\  \ \_\    \ \_\  \ \_____\  \ \_____\  \ \____- 
+  \/_/  \/_/   \/_____/   \/_____/   \/_____/   \/_/     \/_/   \/_____/   \/_____/   \/____/ 
+                                                                                  
+```
 
 Mesofield is a small framework for managing neuroscience hardware.  It controls
 cameras, encoders and other instruments through serial connections and
 [MicroManager](https://micro-manager.org/) using
-[pymmcore-plus]().  The project is aimed at laboratory use and is not a
+[pymmcore-plus](https://pymmcore-plus.github.io/pymmcore-plus/). The project is aimed at laboratory use and is not a
 full production package.
 
 
