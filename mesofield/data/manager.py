@@ -217,9 +217,9 @@ class DataSaver:
 class DataManager:
     """Very small wrapper providing optional :class:`DataSaver`."""
 
-    def __init__(self) -> None:
+    def __init__(self, h5_path: str) -> None:
         self.save: DataSaver
-        self.base: Optional[H5Database] = None
+        self.base = H5Database(h5_path)
         self.queue = DataQueue()
 
         self.devices: List[Any] = []
@@ -233,7 +233,6 @@ class DataManager:
     def setup(self, config: ExperimentConfig, path: str, devices: Iterable[Any]) -> None:
         """Attach configuration, database, and register devices."""
         self.save = DataSaver(config)
-        self.base = H5Database(path)
         self.register_devices(devices)
 
     @log_this_fr

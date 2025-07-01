@@ -75,6 +75,10 @@ class Procedure:
     # Convenience accessors
 
     @property
+    def paths(self):
+        return self.data.base.read('datapaths')
+
+    @property
     def hardware(self) -> HardwareManager:
         return self.config.hardware
     
@@ -95,7 +99,7 @@ class Procedure:
         """
         try:
             self.config.hardware.initialize(self.config)
-            self.data = DataManager()
+            self.data = DataManager(self.h5_path)
             self.logger.info("Hardware initialized successfully")
             
         except RuntimeError as e:  # pragma: no cover - initialization failures
@@ -108,9 +112,7 @@ class Procedure:
         
         It then sends this ExperimentConfig object to the HardwareManager, relaying it to MicroManager mda engines
         
-        NOTE: This method is called by the ConfigController in the GUI whenever a json configuration file is picked,
-        thus, it is necessary to call the Procedure.DataManager.setup() method to ensure that the data manager
-        is aware of the new configuration and can set up the data storage accordingly.
+        NOTE: This method is called by the ConfigController in the GUI whenever a json configuration file is picked
         """
         if json_config:
             self.config.load_json(json_config)
