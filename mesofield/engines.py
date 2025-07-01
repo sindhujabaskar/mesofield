@@ -45,7 +45,6 @@ class MesoEngine(MDAEngine):
 
         self.logger.info(f'setup_sequence loaded LED sequence at time: {time.time()}')
 
-        print('Arduino loaded')
         return super().setup_sequence(sequence)
     
     def exec_sequenced_event(self, event: 'SequencedEvent') -> Iterable['PImagePayload']:
@@ -57,10 +56,7 @@ class MesoEngine(MDAEngine):
         
         custom override sequencerunning loop jgronemeyer24
         """
-        
-        # if self._encoder is not None:
-        #     self._encoder.start()
-        
+
         n_events = len(event.events)
 
         t0 = event.metadata.get("runner_t0") or time.perf_counter()
@@ -112,7 +108,6 @@ class MesoEngine(MDAEngine):
         
         # Stop the Arduino LED Sequence
         self._mmc.getPropertyObject('Arduino-Switch', 'State').stopSequence()
-        # Stop the SerialWorker collecting encoder data and save
         pass
     
 
@@ -139,7 +134,7 @@ class PupilEngine(MDAEngine):
         self.nidaq = sequence.metadata.get("nidaq")
         if self.nidaq is not None:
             self.nidaq.reset()
-        self.logger.info(f'{self.__str__()} setup_sequence loaded Nidaq: {self.nidaq}')
+        self.logger.info(f'setup_sequence loaded Nidaq: {self.nidaq}')
         return super().setup_sequence(sequence)
         
     def exec_sequenced_event(self, event: 'SequencedEvent') -> Iterable['PImagePayload']:
@@ -170,7 +165,7 @@ class PupilEngine(MDAEngine):
             0,  # intervalMS  # TODO: add support for this
             True,  # stopOnOverflow
         )
-        self.logger.info(f'{self.__str__()} exec_sequenced_event with {n_events} events at t0 {t0}')
+        self.logger.info(f'exec_sequenced_event with {n_events} events at t0 {t0}')
         self.post_sequence_started(event)
 
         n_channels = self._mmc.getNumberOfCameraChannels()
@@ -187,7 +182,7 @@ class PupilEngine(MDAEngine):
                     )
                     count += 1
                 else:
-                    if count == n_events or self._mmc1 is not None and self._mmc1.isSequenceRunning() is not True:
+                    if count == n_events: # or self._mmc1 is not None and self._mmc1.isSequenceRunning() is not True:
                         self.logger.debug(f'stopped MDA with {count} events and {remaining} remaining with {self._mmc.getRemainingImageCount()} images in buffer')
                         self._mmc.stopSequenceAcquisition() 
                         break
