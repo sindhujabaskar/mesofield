@@ -193,27 +193,6 @@ class DataSaver:
         except Exception as e:
             self.logger.error(f"Error saving timestamps: {e}")
 
-    def writer_for(self, camera) -> Any:
-        # choose writer based on camera.file_type
-        file_type = getattr(camera, "file_type", None)
-        if file_type == "ome.tiff":
-            path = self.cfg.make_path(camera.name, "ome.tiff", "func")
-            writer = CustomWriter(path)
-            camera.output_path = writer._filename
-            camera.metadata_path = writer._frame_metadata_filename
-        elif file_type == "mp4":
-            path = self.cfg.make_path(camera.name, "mp4", "func")
-            # assume camera.fps exists or default to 30
-            fps = getattr(camera, "fps", 30)
-            writer = CV2Writer(path, fps=fps)
-            camera.output_path = path
-        else:
-            raise ValueError(f"Unsupported camera file_type: {file_type}")
-
-        self.paths.writers[camera.name] = path
-        self.logger.info(f"Writer for {camera.name} set to {path}")
-        return writer
-    
     def save_queue(self, rows: list[list[Any]], path: str | None = None) -> None:
         """Save queued data rows to CSV file specified in DataPaths or override path."""
         if path is None:
@@ -240,12 +219,8 @@ class DataManager:
 
     def __init__(self) -> None:
         self.save: DataSaver
-        self.database: Optional[H5Database] = None
+        self.base: Optional[H5Database] = None
         self.queue = DataQueue()
-
-        # backwards compatibility
-        self.data_queue = self.queue
-        self.saver = None
 
         self.devices: List[Any] = []
         
@@ -255,21 +230,13 @@ class DataManager:
         self._queue_thread: Optional[threading.Thread] = None
         self._stop_queue: bool = False
 
-    # backwards compatibility for tests
-    def set_config(self, config: ExperimentConfig) -> None:
-        self.save = DataSaver(config)
-        self.saver = self.save
-        self.database = None
-
-
-    @log_this_fr
     def setup(self, config: ExperimentConfig, path: str, devices: Iterable[Any]) -> None:
         """Attach configuration, database, and register devices."""
         self.save = DataSaver(config)
-        self.saver = self.save
-        self.database = H5Database(path)
+        self.base = H5Database(path)
         self.register_devices(devices)
 
+    @log_this_fr
     def register_devices(self, devices: Iterable[Any]) -> None:
         """Register a list of hardware devices with the manager."""
         for dev in devices:
@@ -278,8 +245,8 @@ class DataManager:
 
     def append_to_database(self, df: pd.DataFrame, key: str = "data") -> None:
         """Append ``df`` to the database if configured."""
-        if self.database:
-            self.database.update(df, key)
+        if self.base:
+            self.base.update(df, key)
 
     # ------------------------------------------------------------------
     def start_queue_logger(self, path: str | None = None) -> None:
@@ -360,8 +327,9 @@ class DataManager:
             sig = getattr(device.core.mda.events, "frameReady", None)
             if sig is not None and hasattr(sig, "connect"):
                 try:
-                    # frameReady callback signature: (image, metadata)
-                    sig.connect(lambda _img, event, metadata: _push(metadata['camera_metadata']['TimeReceivedByCore']))
+                    # frameReady callback signature: (image, metadata) You can find these in the tiff_frame_metadata.json files for reference
+                    sig.connect(lambda _img, event, metadata: _push(payload=metadata['camera_metadata']['ImageNumber'],
+                                                                    device_ts=metadata['camera_metadata']['TimeReceivedByCore']))
                 except Exception:
                     pass
                 
@@ -394,7 +362,7 @@ class DataManager:
     # ------------------------------------------------------------------
     def update_database(self) -> None:
         """Record the current :class:`DataPaths` into the HDF5 database."""
-        if not (self.database and self.save):
+        if not (self.base and self.save):
             return
 
         cfg = self.save.cfg
@@ -424,6 +392,6 @@ class DataManager:
 
     def read_database(self, key: str = "datapaths") -> Optional[pd.DataFrame]:
         """Read a DataFrame from the underlying :class:`H5Database`."""
-        if self.database:
-            return self.database.read(key)
+        if self.base:
+            return self.base.read(key)
         return None

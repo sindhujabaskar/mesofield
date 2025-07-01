@@ -291,7 +291,7 @@ class ExperimentConfig(ConfigRegister):
             raise ValueError("led_pattern must be a list or a JSON string representing a list")
     
     # Helper method to generate a unique file path
-    def make_path(self, suffix: str, extension: str, bids_type: str = None):
+    def make_path(self, suffix: str, extension: str, bids_type: Optional[str] = None, create_dir: bool = False):
         """ Example:
         ```py
             ExperimentConfig._generate_unique_file_path("images", "jpg", "func")
@@ -306,8 +306,9 @@ class ExperimentConfig(ConfigRegister):
             bids_path = self.bids_dir
         else:
             bids_path = os.path.join(self.bids_dir, bids_type)
-            
-        os.makedirs(bids_path, exist_ok=True)
+
+        if create_dir:
+            os.makedirs(bids_path, exist_ok=True)
         base, ext = os.path.splitext(file)
         counter = 1
         file_path = os.path.join(bids_path, file)

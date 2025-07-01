@@ -101,11 +101,7 @@ class Procedure:
                 self._config.hardware.initialize(self._config)
 
             self.data = DataManager()
-            self.data.setup(
-                self._config,
-                self.h5_path,
-                self._config.hardware.devices.values(),
-            )
+
             self.logger.info("Hardware initialized successfully")
             
         except RuntimeError as e:  # pragma: no cover - initialization failures
@@ -126,25 +122,32 @@ class Procedure:
             self._config.load_json(json_config)
             self._config.hardware._configure_engines(self._config)
         
-        self.data.setup(
-                self._config,
-                os.path.join(self._config.save_dir, f"{self.experiment_id}.h5"),
-                self._config.hardware.devices.values(),
-            )
         
 
     # ------------------------------------------------------------------
+    
+    def prerun(self) -> None:
+        """Run any pre-experiment setup logic."""
+        self.logger.info("Running pre-experiment setup")
+        self.data.setup(
+            self._config,
+            os.path.join(self._config.save_dir, f"{self.experiment_id}.h5"),
+            self._config.hardware.devices.values(),
+        )
+        self.data.start_queue_logger()
+        for cam in self.hardware.cameras:
+            cam.set_writer(self.config.make_path)
+            cam.set_sequence(self.config.build_sequence)
+    
     def run(self) -> None:
         """Run the standard Mesofield workflow."""
         self.logger.info("================= Starting experiment ===================")
+
+        self.prerun()
         self.data.start_queue_logger()
+        
         try:
-            recorders = []
-            for cam in self.hardware.cameras:
-                writer = self.data.save.writer_for(cam)
-                recorders.append((cam.core, self._config.build_sequence(cam), writer))
-                
-            self.hardware.cameras[0].core.mda.events.sequenceFinished.connect(self._cleanup_procedure)
+            self.hardware.cameras[0].core.mda.events.sequenceFinished.connect(self._cleanup_procedure) #type: ignore
 
             if self._config.get("start_on_trigger", False):
                 self.psychopy_process = self._launch_psychopy()
@@ -152,16 +155,19 @@ class Procedure:
 
             self.start_time = datetime.now()
             self.hardware.encoder.start_recording()
-            for mmc, sequence, writer in recorders:
-                mmc.run_mda(sequence, output=writer, block=False)
+            for cam in self.hardware.cameras:
+                cam.start()
         except Exception as e:  # pragma: no cover - hardware errors
             self.logger.error(f"Error during experiment: {e}")
             raise
 
     # ------------------------------------------------------------------
     def save_data(self) -> None:
+        self.config.auto_increment_session()
         mgr = getattr(self, "data_manager", self.data)
-
+        self.hardware.cameras[1].core.stopSequenceAcquisition() #type: ignore
+        for cam in self.hardware.cameras:
+            cam.stop()
         mgr.save.configuration()
         mgr.save.all_notes()
         mgr.save.all_hardware()

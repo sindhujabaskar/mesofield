@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Callable, Any
 from datetime import datetime
 import inspect
 
@@ -8,29 +8,30 @@ from pymmcore_plus.core._device import CameraDevice
 from mesofield.protocols import HardwareDevice, DataProducer
 from mesofield.engines import DevEngine, MesoEngine, PupilEngine
 from mesofield.io.devices.arducam import VideoThread
+from mesofield.io import CustomWriter, CV2Writer
 from mesofield import DeviceRegistry
 from mesofield.utils._logger import get_logger
 
 
-#TODO add the custom writer instantiaion to this class
-#TODO start and stop time in start and stop methods
 @DeviceRegistry.register("camera")
 class MMCamera(DataProducer, HardwareDevice):
 
     device_type = "camera"
     sampling_rate: float = 30.0  # Default sampling rate in Hz
     file_type: str = "ome.tiff"
-    bids_type: Optional[str] = "func"
+    bids_type: Optional[str]
     output_path: Optional[str] = None
     metadata_path: Optional[str] = None
+    writer: CustomWriter | CV2Writer
     
     def __init__(self, cfg: dict):
         self.camera_device: Optional[CameraDevice | VideoThread] = None
         self.core: Optional[CMMCorePlus | VideoThread] = None
+        self.cfg = cfg
         self.id = cfg["id"]
         self.name = cfg["name"]
-        self._started: float # Timestamp when the device was started
-        self._stopped: float # Timestamp when the device was stopped
+        self._started: datetime # Timestamp when the device was started
+        self._stopped: datetime # Timestamp when the device was stopped
         self.backend = cfg.get("backend", "").lower()
         self.properties = cfg.get("properties", {})
         self.viewer = cfg.get("viewer_type", "static")
@@ -65,6 +66,35 @@ class MMCamera(DataProducer, HardwareDevice):
         self.camera_device = vid
         self.core = vid
 
+    def set_writer(self, make_path: Callable[[str, str, str, bool], str]):
+        """
+        Set the writer for this camera.
+        
+        Expects to be give `ExperimentConfig.make_path` function
+        which is used to generate the output path for the camera data.
+        """
+        self.output_path = make_path(self.name, self.file_type, self.bids_type, True)
+        
+        if self.file_type == "ome.tiff":
+            self.writer = CustomWriter(filename=self.output_path)
+        elif self.file_type == "mp4":
+            self.writer = CV2Writer(filename=self.output_path, fps=int(self.sampling_rate))
+        self.metadata_path = self.writer._frame_metadata_filename
+        self.logger.info(f"Writer set to {self.writer}")
+
+    def set_sequence(self, build_mda: Callable[[DataProducer], Any]):
+        """
+        Set the sequence for this camera.
+        
+        Expects to be given `ExperimentConfig.build_sequence` method, which provides an MDA sequence
+        for the camera. This is only applicable for the Micromanager backend.
+        """
+        if self.backend == "micromanager":
+            self.sequence = build_mda(self)
+            self.logger.info("MDA sequence set for Micromanager backend.")
+        else:
+            self.logger.warning("Setting sequence is not supported for OpenCV backend.")
+
     def initialize(self):
         for dev_id, props in self.properties.items():
             if not isinstance(props, dict):
@@ -88,11 +118,14 @@ class MMCamera(DataProducer, HardwareDevice):
                         setter(dev_id, prop, val)
 
     def start(self) -> bool:
-        self.is_active = True
+        #self.is_active = True
+        self._started = datetime.now()
+        self.core.run_mda(events=self.sequence, output=self.writer, block=False) #type: ignore
         return True
 
     def stop(self) -> bool:
-        self.is_active = False
+        #self.is_active = False
+        self._stopped = datetime.now()
         return True
 
     def get_data(self):
@@ -127,21 +160,14 @@ class MMCamera(DataProducer, HardwareDevice):
         module = inspect.getmodule(self)
         module_name = module.__name__ if module else "<unknown>"
         module_file = getattr(module, "__file__", "<built-in>")
-        # Instance attributes (public)
-        attributes = {k: v for k, v in vars(self).items() if not k.startswith("_")}
         # Inheritance tree (object → … → MMCamera)
         mro = inspect.getmro(self.__class__)
         inheritance = " → ".join(cls.__name__ for cls in reversed(mro))
         return (
-            f"<MMCamera\n"
-            f"  id          = {self.id!r}\n"
-            f"  name        = {self.name!r}\n"
+            f"\n<MMCamera.{self.id}>\n"
             f"  backend     = {self.backend!r}\n"
             f"  module      = {module_name!r} ({module_file!r})\n"
             f"  properties  = {self.properties!r}\n"
-            f"  attributes  = {attributes!r}\n"
             f"  engine      = {type(self._engine).__name__!r}\n"
-            f"  device      = {type(self.camera_device).__name__!r}\n"
             f"  inheritance = {inheritance}\n"
-            f">"
         )
