@@ -101,7 +101,7 @@ class Nidaq:
         while not self._stop_event.is_set():
             # 1) Start Read count & timestamp
             cnt = self._ci.read()
-            ts = time.time()
+            ts = datetime.now()
 
             # 2) Trigger camera
             self._do.write(True)
@@ -111,7 +111,7 @@ class Nidaq:
             # 3) For each new edge, record the timestamp
             new_count = int(cnt)
             if new_count > prev_count:
-                event_data = [ts] * (new_count - prev_count)
+                event_data = ts #] * (new_count - prev_count)
                 with self._lock:
                     self._exposure_times.extend(event_data)
                 self.data_event.emit(cnt, event_data)

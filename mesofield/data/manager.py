@@ -39,7 +39,7 @@ class DataPacket:
     """Entry in :class:`DataQueue`."""
 
     device_id: str
-    timestamp: float
+    timestamp: datetime
     payload: Any
     device_ts: float | None = None
     meta: Dict[str, Any] = field(default_factory=dict)
@@ -60,13 +60,13 @@ class DataQueue:
         device_id: str,
         payload: Any,
         *,
-        timestamp: float | None = None,
+        timestamp: datetime | None = None,
         device_ts: float | None = None,
         **meta: Any,
     ) -> None:
         """Add a new data packet to the queue."""
         if timestamp is None:
-            timestamp = time.time()
+            timestamp = datetime.now()
         self._queue.put(DataPacket(device_id, timestamp, payload, device_ts, meta))
 
     def pop(self, block: bool = True, timeout: float | None = None) -> DataPacket:
@@ -202,8 +202,8 @@ class DataSaver:
             with open(path, "w", newline="") as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow([
-                    "datetime",
-                    "timestamp",
+                    "queue_elapsed",
+                    "packet_ts",
                     "device_ts",
                     "device_id",
                     "payload",
@@ -235,7 +235,7 @@ class DataManager:
         self.save = DataSaver(config)
         self.register_devices(devices)
 
-    @log_this_fr
+    #@log_this_fr
     def register_devices(self, devices: Iterable[Any]) -> None:
         """Register a list of hardware devices with the manager."""
         for dev in devices:
@@ -287,7 +287,7 @@ class DataManager:
             except queue.Empty:
                 continue
 
-            now = datetime.now().isoformat()
+            now = time.perf_counter()  # Use monotonic time for consistency
             row = [now, pkt.timestamp, pkt.device_ts, pkt.device_id, pkt.payload]
             self.queue_packets.append(row)
 
