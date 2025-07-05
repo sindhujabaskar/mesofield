@@ -11,6 +11,8 @@ import warnings
 from pandas.io.pytables import PerformanceWarning
 warnings.filterwarnings("ignore", category=PerformanceWarning)
 
+from mesofield.data.proc.load import ExperimentData
+
 
 class H5Database:
     """Simple helper for storing experiment data in an HDF5 file."""
@@ -71,3 +73,34 @@ class H5Database:
 
         # name level 0 'Sub', level 1 'Ses', level 2 'Task'
         return pd.concat(frames, names=["Sub", "Ses", "Task"])
+
+    def refresh(self, root_dir: str, key: str = "datapaths") -> pd.DataFrame:
+        """Rebuild ``key`` from ``root_dir`` and overwrite existing data.
+
+        Parameters
+        ----------
+        root_dir : str
+            Directory containing the BIDS-formatted data hierarchy.
+        key : str, optional
+            HDF5 key to refresh, by default ``"datapaths"``.
+
+        Returns
+        -------
+        pandas.DataFrame
+            The DataFrame written to the store.
+        """
+
+        exp = ExperimentData(root_dir)
+        df = exp.data
+
+        with pd.HDFStore(self.path, mode="a") as store:
+            if key in store:
+                store.remove(key)
+
+            fmt = "table"
+            if df.index.nlevels > 1 or df.columns.nlevels > 1:
+                fmt = "fixed"
+
+            store.put(key, df, format=fmt)
+
+        return df

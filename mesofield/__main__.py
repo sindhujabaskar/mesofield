@@ -281,5 +281,17 @@ def ipython(yaml_path, json_path):
     config.load_parameters(json_path)
     embed(header='Mesofield ExperimentConfig Terminal. Type `config.` + TAB ', local={'config': config})
 
+
+@cli.command()
+@click.option('--dir', 'experiment_dir', required=True, help='Directory containing BIDS data')
+@click.option('--db', 'db_path', required=True, help='Path to the HDF5 database')
+def refresh_db(experiment_dir, db_path):
+    """Rebuild the database from files on disk."""
+    from mesofield.io.h5db import H5Database
+
+    db = H5Database(db_path)
+    db.refresh(experiment_dir)
+    click.echo(f"Database refreshed from {experiment_dir}")
+
 if __name__ == "__main__":
     cli()
