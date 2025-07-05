@@ -281,9 +281,9 @@ class ConfigController(QWidget):
         try:
             led_pattern = self.config.led_pattern
             self.config.hardware.Dhyana.core.getPropertyObject('Arduino-Switch', 'State').loadSequence(led_pattern)
-            self._mmc1.getPropertyObject('Arduino-Switch', 'State').loadSequence(led_pattern)
-            self._mmc1.getPropertyObject('Arduino-Switch', 'State').setValue(4) # seems essential to initiate serial communication
-            self._mmc1.getPropertyObject('Arduino-Switch', 'State').startSequence()
+            self.config.hardware.Dhyana.core.getPropertyObject('Arduino-Switch', 'State').loadSequence(led_pattern)
+            self.config.hardware.Dhyana.core.getPropertyObject('Arduino-Switch', 'State').setValue(4) # seems essential to initiate serial communication
+            self.config.hardware.Dhyana.core.getPropertyObject('Arduino-Switch', 'State').startSequence()
             print("LED test pattern sent successfully.")
         except Exception as e:
             print(f"Error testing LED pattern: {e}")
