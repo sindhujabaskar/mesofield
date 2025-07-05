@@ -124,11 +124,9 @@ class Procedure:
         """Run any pre-experiment setup logic."""
         self.logger.info("Running pre-experiment setup")
 
-        self.data.setup(
-            self.config,
-            os.path.join(self.config.save_dir, f"{self.experiment_id}.h5"),
-            self.config.hardware.devices.values(),
-        )
+        self.data.setup(self.config)
+        if not self.data.devices:
+            self.data.register_devices(self.config.hardware.devices.values())
 
         self.data.start_queue_logger()
 

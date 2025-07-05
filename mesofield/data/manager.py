@@ -223,6 +223,7 @@ class DataManager:
         self.queue = DataQueue()
 
         self.devices: List[Any] = []
+        self._registered_ids: set[str] = set()
         
         self.queue_log_path: Optional[str] = None
         self.queue_packets: list[list[Any]] = []
@@ -230,10 +231,13 @@ class DataManager:
         self._queue_thread: Optional[threading.Thread] = None
         self._stop_queue: bool = False
 
-    def setup(self, config: ExperimentConfig, path: str, devices: Iterable[Any]) -> None:
-        """Attach configuration, database, and register devices."""
+    def setup(
+        self, config: ExperimentConfig, devices: Iterable[Any] | None = None
+    ) -> None:
+        """Attach configuration and optionally register devices."""
         self.save = DataSaver(config)
-        self.register_devices(devices)
+        if devices is not None:
+            self.register_devices(devices)
 
     #@log_this_fr
     def register_devices(self, devices: Iterable[Any]) -> None:
@@ -298,7 +302,12 @@ class DataManager:
 
     def register_hardware_device(self, device: Any) -> None:  # pragma: no cover - convenience
         """Track a hardware device and connect its data stream to the queue."""
+        dev_id = getattr(device, "device_id", getattr(device, "id", "unknown"))
+        if device in self.devices or dev_id in self._registered_ids:
+            return
+
         self.devices.append(device)
+        self._registered_ids.add(dev_id)
 
         # Try to connect various callback styles to push data to our queue
         def _push(payload: Any, device_ts: Any = None, *, dev=device) -> None:
