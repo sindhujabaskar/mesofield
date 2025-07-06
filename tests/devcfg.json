@@ -1,0 +1,41 @@
+{
+    "Configuration": {
+        "experimenter": "name",
+        "protocol": "HFSA",
+        "experiment_directory": "D:/250627_HFSA",
+        "hardware_config_file": "D:/250627_HFSA/hardware.yaml",
+        "database_path": "D:/250627_HFSA/database.h5",
+        "duration": 1200,
+        "start_on_trigger": false
+    },
+    "Subjects": {
+        "STREHAB07": {
+            "sex": "F",
+            "genotype": "aldh1l1-gcamp8s",
+            "DOB": "2025-01-02",
+            "DOS": "2025-06-20",
+            "session": "05",
+            "task": "widefield",
+            "weight": "20.30"
+        },
+        "STREHAB09": {
+            "sex": "M",
+            "genotype": "aldh1l1-gcamp8s",
+            "DOB": "2025-01-02",
+            "DOS": "2025-06-21",
+            "session": "04",
+            "task": "widefield",
+            "weight": "25.94"
+        }
+    },
+    "DisplayKeys": [
+        "subject",
+        "session",
+        "task",
+        "experimenter",
+        "protocol",
+        "duration",
+        "start_on_trigger",
+        "weight"
+    ]
+}
