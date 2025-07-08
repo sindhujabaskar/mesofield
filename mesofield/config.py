@@ -449,7 +449,7 @@ class ExperimentConfig(ConfigRegister):
                 self.set(key, val)
             except Exception as e:
                 self.logger.error(f"Failed to update session in JSON file: {e}")
-        else:
-            self.logger.warning("No JSON file to update; _json_file_path not set or file missing")
+        # else:
+        #     self.logger.warning("No JSON file to update; _json_file_path not set or file missing")
 
 
