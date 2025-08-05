@@ -209,7 +209,7 @@ class CustomJSONEncoder(json.JSONEncoder):
 class CV2Writer(_5DWriterBase[Any]):
     """Write incoming MDA frames directly to an mp4/avi video using OpenCV."""
 
-    def __init__(self, filename: Path | str, fps: int = 30, fourcc: str = "mp4v") -> None:
+    def __init__(self, filename: Path | str, fps: int = 30, fourcc: str = "H264") -> None:
         try:
             import cv2  # noqa: F401
         except ImportError as e:  # pragma: no cover - optional dependency
@@ -250,7 +250,7 @@ class CV2Writer(_5DWriterBase[Any]):
         # allocate a destination array for normalization
         dst = np.empty_like(frame)
         frame_8u = cv2.normalize(frame, dst, 0, 255, cv2.NORM_MINMAX)
-        frame_8u = frame_8u.astype(np.uint8)
+        frame_8u = cv2.convertScaleAbs(frame)  # More robust conversion
         ary.write(frame_8u)
 
     def finalize_metadata(self) -> None:

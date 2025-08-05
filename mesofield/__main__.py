@@ -23,6 +23,10 @@ Commands:
     batch_pupil: Convert the pupil videos to mp4 format
         --dir: Directory containing the BIDS formatted /data hierarchy
         
+    convert_h264: Convert video files to H264 format for better compatibility
+        --dir: Directory containing video files to convert
+        --pattern: Glob pattern to match files (e.g., "*.mp4", "pupil*.mp4")
+        
     plot_session: Plot the session data
         --dir: Path to experimental directory containing BIDS formatted /data hierarchy
         --sub: Subject ID (the name of the subject folder)
@@ -67,7 +71,7 @@ def launch(config):
 # Font: Sub-Zero; character width: Full, Character Height: Fitted
 # https://patorjk.com/software/taag/#p=display&h=0&v=1&f=Sub-Zero&t=Mesofield
     ascii = r"""
- __    __     ______     ______     ______     ______   __     ______     __         _____    
+ __    __     ______     ______     ______     ______     ______   __     ______     __         _____    
 /\ "-./  \   /\  ___\   /\  ___\   /\  __ \   /\  ___\ /\ \   /\  ___\   /\ \       /\  __-.  
 \ \ \-./\ \  \ \  __\   \ \___  \  \ \ \/\ \  \ \  __\ \ \ \  \ \  __\   \ \ \____  \ \ \/\ \ 
  \ \_\ \ \_\  \ \_____\  \/\_____\  \ \_____\  \ \_\    \ \_\  \ \_____\  \ \_____\  \ \____- 
@@ -133,24 +137,25 @@ def launch(config):
 
 
 @cli.command()
-@click.option('--dir', help='Save the plot to the processing directory in the Experiment folder')
+@click.option('--dir',  help='Save the plot to the processing directory in the Experiment folder')
 @click.option('--sub', help='Subject ID (the name of the subject folder)')
-def trace_meso(experiment_dir, subject_id):
+def trace_meso(dir, sub):
     import pandas as pd
     import mesofield.data.proc.load as load
     import mesofield.data.batch as batch
     
-    datadict =  load.file_hierarchy(experiment_dir)
+    datadict =  load.file_hierarchy(dir)
+
     session_paths = []
-    for key in sorted(datadict[subject_id].keys()):
+    for key in sorted(datadict[sub].keys()):
         if key.isdigit():
-            session_paths.append(datadict[subject_id][key]['meso']['tiff'])
+            session_paths.append(datadict[sub][key]['widefield']['meso_tiff'])
     
     results = batch.mean_trace_from_tiff(session_paths)
     for path, trace in results.items():
         print(f"{path}: {trace[:10]}") 
         
-    outdir = os.path.join(experiment_dir, "processed", subject_id)
+    outdir = os.path.join(dir, "processed", sub)
     os.makedirs(outdir, exist_ok=True)
 
     for path, trace in results.items():
@@ -292,6 +297,18 @@ def refresh_db(experiment_dir, db_path):
     db = H5Database(db_path)
     db.refresh(experiment_dir)
     click.echo(f"Database refreshed from {experiment_dir}")
+
+@cli.command()
+@click.option('--dir', required=True, help='Directory containing video files to convert')
+@click.option('--pattern', default='*.mp4', help='Glob pattern to match files (e.g., "*.mp4", "pupil*.mp4")')
+def convert_h264(dir, pattern):
+    """Convert video files to H264 format for better compatibility."""
+    from mesofield.data.batch import batch_convert_to_h264
+    
+    batch_convert_to_h264(
+        parent_directory=dir,
+        pattern=pattern
+    )
 
 if __name__ == "__main__":
     cli()
