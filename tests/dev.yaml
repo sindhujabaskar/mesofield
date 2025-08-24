@@ -15,12 +15,18 @@ cameras:
     name: "devcam1"
     backend: "micromanager"
     micromanager_path: "C:/Program Files/Micro-Manager-2.0"
+    # output:
+    #   bids_type: "func"
+    #   file_type: "mp4"
 
 
   - id: "dev"
     name: "devcam2"
     backend: "micromanager"
-    micromanager_path: "C:/Program Files/Micro-Manager-thor"
+    micromanager_path: "C:/Program Files/Micro-Manager-2.0"
+    output:
+      bids_type: "func"
+      file_type: "mp4"
 
 
 

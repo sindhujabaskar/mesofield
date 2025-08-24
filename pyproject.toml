@@ -1,0 +1,93 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools-scm[toml]>=6.2", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mesofield"
+version = "1.2.1"
+description = "Mesofield is an open-source image acquisition Python software package build for the Sipe Laboratory at Pennsylvania State University."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Gronemeyer"}
+]
+keywords = ["imaging", "microscopy", "acquisition", "neuroscience"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+dependencies = [
+    "annotated-types",
+    "click",
+    "ipykernel",
+    "ipython",
+    "jupyter_client",
+    "jupyter_core",
+    "markdown-it-py",
+    "matplotlib",
+    "nidaqmx",
+    "numpy",
+    "packaging",
+    "pandas",
+    "parso",
+    "pillow",
+    "platformdirs",
+    "psygnal",
+    "pymmcore",
+    "pymmcore-plus",
+    "pymmcore-widgets",
+    "PyQt6",
+    "PyQt6-Qt6",
+    "PyQt6_sip",
+    "pyqtgraph",
+    "pyserial",
+    "python-dateutil",
+    "pytz",
+    "pywin32; sys_platform == 'win32'",
+    "pyzmq",
+    "qtconsole",
+    "rich",
+    "setuptools",
+    "tifffile",
+    "typer",
+    "typer-slim",
+    "typing_extensions",
+    "useq-schema",
+    "wheel",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "coverage",
+    "flake8",
+    "black",
+    "isort",
+    "pytest-cov",
+    "mypy",
+    "gitchangelog",
+    "mkdocs",
+]
+
+[project.scripts]
+mesofield = "mesofield.__main__:cli"
+
+[project.urls]
+Homepage = "https://github.com/Gronemeyer/mesofield/"
+Repository = "https://github.com/Gronemeyer/mesofield/"
+Issues = "https://github.com/Gronemeyer/mesofield/issues"
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", ".github*"]
+
+[tool.setuptools.package-data]
+mesofield = ["VERSION"]
