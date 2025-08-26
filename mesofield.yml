@@ -1,0 +1,16 @@
+name: mesofield
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - jupyter
+  - ipykernel
+  - pytest
+  - pytables
+pip:
+  - pymmcore-plus
+  - pymmcore-widgets
+  - pysignal
+  - qtconsole
+
