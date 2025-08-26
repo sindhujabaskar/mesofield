@@ -39,6 +39,8 @@ Non-OME (ImageJ) hyperstack axes MUST be in TZCYXS order
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+from mesofield.data.proc.crop_enhance_mp4 import BASE_DIR
+
 if TYPE_CHECKING:
     from pymmcore_plus.mda.metadata import SummaryMetaV1  # type: ignore
 
@@ -52,6 +54,12 @@ import json
 
 IMAGEJ_AXIS_ORDER = "tzcyxs"
 FRAME_MD_FILENAME = "_frame_metadata.json"
+
+# ─── H264 Video Codec ─────────────────────────────────────────────────────
+BASE_DIR = Path(__file__).resolve().parent.parent
+CODEC_DIRECTORY = str(BASE_DIR / 'video-codecs')
+OPENH264_DLL_PATH = str(Path(CODEC_DIRECTORY) / 'openh264-1.8.0-win64.dll')
+# ─────────────────────────────────────────────────────────────────
 
 class CustomWriter(_5DWriterBase[np.memmap]):
     """Custom Override of Pymmcore-Plus MDA handler that writes to a 5D OME-TIFF file.
@@ -211,7 +219,23 @@ class CV2Writer(_5DWriterBase[Any]):
 
     def __init__(self, filename: Path | str, fps: int = 30, fourcc: str = "H264") -> None:
         try:
+            from pathlib import Path
+            import os
             import cv2  # noqa: F401
+
+            # Set environment variables to suppress OpenCV/FFMPEG output BEFORE importing cv2
+            os.environ['OPENCV_LOG_LEVEL'] = 'SILENT'
+            os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'loglevel;quiet'
+            os.environ['OPENCV_VIDEOIO_DEBUG'] = '0'
+
+            cv2.setLogLevel(0)  # 0 = Silent
+
+            os.environ['OPENH264_LIBRARY'] = OPENH264_DLL_PATH
+            if CODEC_DIRECTORY not in os.environ.get('PATH', ''):
+                os.environ['PATH'] = CODEC_DIRECTORY + os.pathsep + os.environ.get('PATH', '')
+            if hasattr(os, 'add_dll_directory'):
+                os.add_dll_directory(CODEC_DIRECTORY)
+                
         except ImportError as e:  # pragma: no cover - optional dependency
             raise ImportError(
                 "opencv-python is required to use this handler. "
