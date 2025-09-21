@@ -148,14 +148,15 @@ class ImagePreview(QWidget):
     """
 
     def __init__(self, parent: QWidget = None, *, 
-                 mmcore: CMMCorePlus, 
-                 use_with_mda: bool = True):
+                 _clims: Union[Tuple[float, float], Literal["auto"]] = (0, 255),
+                 use_with_mda: bool = True,
+                 mmcore: CMMCorePlus ):
         super().__init__(parent=parent)
         if mmcore is None:
             raise ValueError("A CMMCorePlus instance must be provided.")
         self._mmcore = mmcore
         self._use_with_mda = use_with_mda
-        self._clims: Union[Tuple[float, float], Literal["auto"]] = "auto"
+        self._clims = _clims
         self._cmap: str = "grayscale"
         self._current_frame = None
         self._frame_lock = Lock()
@@ -337,7 +338,7 @@ class ImagePreview(QWidget):
         return self._clims
 
     @clims.setter
-    def clims(self, clims: Union[Tuple[float, float], Literal["auto"]] = "auto") -> None:
+    def clims(self, clims: Union[Tuple[float, float], Literal["auto"]] = (0, 255)) -> None:
         """Set the contrast limits of the image.
 
         Parameters
@@ -380,7 +381,7 @@ class InteractivePreview(pg.ImageView):
         super().__init__(parent=parent)
         self._mmcore: CMMCorePlus = mmcore
         self._use_with_mda = use_with_mda
-        self._clims: Union[Tuple[float, float], Literal["auto"]] = "auto"
+        self._clims: Union[Tuple[float, float], Literal["auto"]] = (0, 65535)
         self._current_frame = np.zeros((512, 512), dtype=np.uint8)
         self._display_image(self._current_frame)
         self._cmap: str = "grayscale"

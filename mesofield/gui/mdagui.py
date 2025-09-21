@@ -116,7 +116,11 @@ class MDA(QWidget):
             # Preview widget based on cam.viewer
             if cam.viewer == "static":
                 if isinstance(cam.core, CMMCorePlus):
-                    preview = ImagePreview(mmcore=cam.core)
+                    if cam.name.lower() == 'mesoscope':
+                        preview = ImagePreview(mmcore=cam.core, _clims='auto')
+                    else:
+                        preview = ImagePreview(mmcore=cam.core)
+
                     # Buttons row
                     btn_box = QWidget()
                     btn_box.setLayout(QHBoxLayout())
