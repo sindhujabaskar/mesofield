@@ -211,8 +211,8 @@ class Procedure:
 
 # Factory function for creating procedures
 def create_procedure(procedure_class: Type[Procedure],
-                    experiment_id: str = "default",
-                    experimentor: str = "researcher",
+                    protocol: str = "default",
+                    experimenter: str = "researcher",
                     hardware_yaml: str = "hardware.yaml",
                     data_dir: str = "./data",
                     json_config: Optional[str] = None,
