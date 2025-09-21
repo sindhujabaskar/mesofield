@@ -117,14 +117,14 @@ def launch(config):
     display_keys = cfg_json.get('DisplayKeys')
     hardware_yaml = cfg.get('hardware_config_file', 'hardware.yaml')
     data_dir = cfg.get('experiment_directory', '.')
-    experiment_id = cfg.get('protocol', 'experiment')
-    experimentor = cfg.get('experimenter', 'researcher')
+    protocol = cfg.get('protocol', 'experiment')
+    experimenter = cfg.get('experimenter', 'researcher')
 
     time.sleep(2) #give the splash screen a moment to show :)
     procedure = create_procedure(
         Procedure,
-        experiment_id=experiment_id,
-        experimentor=experimentor,
+        protocol=protocol,
+        experimenter=experimenter,
         hardware_yaml=hardware_yaml,
         data_dir=data_dir,
         json_config=config

@@ -76,8 +76,8 @@ class Configurator(Protocol):
 class Procedure(Protocol):
     """Protocol defining the standard interface for experiment procedures."""
     
-    experiment_id: str
-    experimentor: str
+    protocol: str
+    experimenter: str
     config: Configurator
     hardware_yaml: str
     data_dir: str

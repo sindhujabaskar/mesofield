@@ -30,8 +30,8 @@ class ProcedureSignals(QObject):
 @dataclass 
 class ProcedureConfig:
     """Configuration container for procedures."""
-    experiment_id: str = "default_experiment"
-    experimentor: str = "researcher"
+    protocol: str = "default_experiment"
+    experimenter: str = "researcher"
     hardware_yaml: str = "hardware.yaml"
     data_dir: str = "./data"
     json_config: Optional[str] = None
@@ -51,22 +51,22 @@ class Procedure:
             **procedure_config.custom_parameters,
         }
 
-        self.experiment_id = procedure_config.experiment_id
-        self.experimentor = procedure_config.experimentor
+        self.protocol = procedure_config.protocol
+        self.experimenter = procedure_config.experimenter
         self.hardware_yaml = procedure_config.hardware_yaml
         self.data_dir = procedure_config.data_dir
-        self.h5_path = os.path.join(self.data_dir, f"{self.experiment_id}.h5")
+        self.h5_path = os.path.join(self.data_dir, f"{self.protocol}.h5")
 
         # Initialize configuration and apply custom parameters
         self.config = ExperimentConfig(self.hardware_yaml)
         for key, value in procedure_config.custom_parameters.items():
             self.config.set(key, value)
 
-        self.config.set("experiment_id", self.experiment_id)
-        self.config.set("experimentor", self.experimentor)
+        self.config.set("protocol", self.protocol)
+        self.config.set("experimenter", self.experimenter)
 
-        self.logger = get_logger(f"PROCEDURE.{self.experiment_id}")
-        self.logger.info(f"Initialized procedure: {self.experiment_id}")
+        self.logger = get_logger(f"PROCEDURE.{self.protocol}")
+        self.logger.info(f"Initialized procedure: {self.protocol}")
         self.initialize_hardware()
         
         if procedure_config.json_config:
@@ -165,7 +165,7 @@ class Procedure:
         mgr.save.configuration()
         mgr.save.all_notes()
         mgr.save.all_hardware()
-        mgr.save.save_timestamps(self.experiment_id, self.start_time, self.stopped_time)
+        mgr.save.save_timestamps(self.protocol, self.start_time, self.stopped_time)
         mgr.update_database()
         #self.config.auto_increment_session()
         # persist any modified configuration values back to the JSON file
@@ -211,8 +211,8 @@ class Procedure:
 
 # Factory function for creating procedures
 def create_procedure(procedure_class: Type[Procedure],
-                    experiment_id: str = "default",
-                    experimentor: str = "researcher",
+                    protocol: str = "default",
+                    experimenter: str = "researcher",
                     hardware_yaml: str = "hardware.yaml",
                     data_dir: str = "./data",
                     json_config: Optional[str] = None,
@@ -222,8 +222,8 @@ def create_procedure(procedure_class: Type[Procedure],
     
     Args:
         procedure_class: The procedure class to instantiate
-        experiment_id: Unique identifier for the experiment
-        experimentor: Name of the person running the experiment
+        protocol: Unique experiment protocol identifier for the experiment
+        experimenter: Name of the person running the experiment
         hardware_yaml: Path to hardware configuration file
         data_dir: Directory for saving data
         json_config: Optional JSON configuration file
@@ -233,8 +233,8 @@ def create_procedure(procedure_class: Type[Procedure],
         Instance of the specified procedure class
     """
     config = ProcedureConfig(
-        experiment_id=experiment_id,
-        experimentor=experimentor,
+        protocol=protocol,
+        experimenter=experimenter,
         hardware_yaml=hardware_yaml,
         data_dir=data_dir,
         json_config=json_config,

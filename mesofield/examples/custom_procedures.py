@@ -25,8 +25,8 @@ class SimpleBehaviorProcedure(Procedure):
         # Create default procedure config if none provided
         if procedure_config is None:
             procedure_config = ProcedureConfig(
-                experiment_id="simple_behavior_001",
-                experimentor="researcher",
+                protocol="simple_behavior_001",
+                experimenter="researcher",
                 data_dir="data/behavior_experiments",
                 notes=["Simple behavior paradigm", "Mouse running on treadmill"]
             )
@@ -84,8 +84,8 @@ class MultiTrialProcedure(Procedure):
     def __init__(self, config: ExperimentConfig, procedure_config: Optional[ProcedureConfig] = None):
         if procedure_config is None:
             procedure_config = ProcedureConfig(
-                experiment_id="multi_trial_001",
-                experimentor="researcher",
+                protocol="multi_trial_001",
+                experimenter="researcher",
                 data_dir="data/multi_trial_experiments",
                 notes=["Multiple trial experiment", "Custom inter-trial intervals"]
             )
@@ -162,8 +162,8 @@ class OptoStimulationProcedure(Procedure):
     def __init__(self, config: ExperimentConfig, procedure_config: Optional[ProcedureConfig] = None):
         if procedure_config is None:
             procedure_config = ProcedureConfig(
-                experiment_id="opto_stim_001",
-                experimentor="researcher",
+                protocol="opto_stim_001",
+                experimenter="researcher",
                 data_dir="data/optogenetics",
                 notes=["Optogenetic stimulation", "Blue light, 473nm", "10Hz pulses"]
             )
