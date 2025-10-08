@@ -13,6 +13,7 @@ cameras, encoders and other instruments through serial connections and
 [pymmcore-plus](https://pymmcore-plus.github.io/pymmcore-plus/). The project is aimed at laboratory use and is not a
 full production package.
 
+<img width="2454" height="1592" alt="Screenshot 2025-07-10 161939" src="https://github.com/user-attachments/assets/151196ab-2d74-4644-85b7-c4facf3b779a" />
 
 ## Overview
 
