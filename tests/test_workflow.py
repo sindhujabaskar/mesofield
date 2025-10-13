@@ -176,8 +176,8 @@ def test_procedure_workflow(tmp_path, monkeypatch):
     }, cfg_json.open("w"))
 
     pcfg = ProcedureConfig(
-        experiment_id="exp1",
-        experimentor="tester",
+        protocol="exp1",
+        experimenter="tester",
         hardware_yaml=str(hw_path),
         data_dir=str(tmp_path),
         json_config=str(cfg_json),
