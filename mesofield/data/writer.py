@@ -56,9 +56,11 @@ IMAGEJ_AXIS_ORDER = "tzcyxs"
 FRAME_MD_FILENAME = "_frame_metadata.json"
 
 # ─── H264 Video Codec ─────────────────────────────────────────────────────
+# base project dir (mesofield/)
 BASE_DIR = Path(__file__).resolve().parent.parent
-CODEC_DIRECTORY = str(BASE_DIR / 'video-codecs')
-OPENH264_DLL_PATH = str(Path(CODEC_DIRECTORY) / 'openh264-1.8.0-win64.dll')
+# codec folder is under mesofield/external/video-codecs
+CODEC_DIRECTORY = str(BASE_DIR / "external" / "video-codecs")
+OPENH264_DLL_PATH = str(Path(CODEC_DIRECTORY) / "openh264-1.8.0-win64.dll")
 # ─────────────────────────────────────────────────────────────────
 
 class CustomWriter(_5DWriterBase[np.memmap]):

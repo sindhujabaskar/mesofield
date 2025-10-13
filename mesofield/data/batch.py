@@ -1,6 +1,7 @@
 import os
 import concurrent.futures
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from pathlib import Path
 
 import numpy as np
 from tqdm import tqdm
@@ -17,11 +18,16 @@ import cv2
 # Set OpenCV logging to silent mode after import
 cv2.setLogLevel(0)  # 0 = Silent
 
+# ─── H264 Video Codec ─────────────────────────────────────────────────────
 # OpenH264 codec paths for video conversion compatibility
 # These paths point to external H.264 codec DLLs needed for OpenCV video encoding
 # when the built-in codecs are not available or compatible with target software
-OPENH264_DLL_PATH = r'C:\sipefield\drivers\video-codecs\openh264-1.8.0-win64.dll'
-CODEC_DIRECTORY = r'C:\sipefield\drivers\video-codecs'
+# base project dir (mesofield/)
+BASE_DIR = Path(__file__).resolve().parent.parent
+# codec folder is under mesofield/external/video-codecs
+CODEC_DIRECTORY = str(BASE_DIR / "external" / "video-codecs")
+OPENH264_DLL_PATH = str(Path(CODEC_DIRECTORY) / "openh264-1.8.0-win64.dll")
+# ─────────────────────────────────────────────────────────────────
 
 
 def mean_trace_from_tiff(tiff_paths, show_progress=True, save=False):
