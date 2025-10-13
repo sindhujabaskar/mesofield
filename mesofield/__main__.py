@@ -146,10 +146,24 @@ def trace_meso(dir, sub):
     
     datadict =  load.file_hierarchy(dir)
 
+    print(f"DEBUG: Available subject keys: {list(datadict.keys())}")
+    print(f"DEBUG: Available session keys for subject '{sub}': {list(datadict[sub].keys())}")
+
     session_paths = []
     for key in sorted(datadict[sub].keys()):
         if key.isdigit():
-            session_paths.append(datadict[sub][key]['widefield']['meso_tiff'])
+            session = datadict[sub][key]
+            if 'widefield' in session:
+                print(f"DEBUG: Session {key} widefield keys: {list(session['widefield'].keys())}")
+                if 'meso_tiff' in session['widefield']:
+                    path = session['widefield']['meso_tiff']
+                    print(f"DEBUG: Found session {key}, meso_tiff path: {path}")
+                    session_paths.append(path)
+                else:
+                    print(f"WARNING: Session {key} 'widefield' keys: {list(session['widefield'].keys())} (missing 'meso_tiff')")
+            else:
+                print(f"WARNING: Session {key} missing 'widefield' key. Available keys: {list(session.keys())}")
+    print(f"DEBUG: Collected session_paths: {session_paths}")
     
     results = batch.mean_trace_from_tiff(session_paths)
     for path, trace in results.items():
@@ -309,6 +323,28 @@ def convert_h264(dir, pattern):
         parent_directory=dir,
         pattern=pattern
     )
+    
+@cli.command()
+@click.option('--dir', required=True, help='Experiment directiory with pupil files')
+@click.option('--sub', required=True, help='Subject ID (the name of the subject folder)')
+@click.option('--ses', required=True, help='Session ID (the name of the session folder)')
+def plot_session(dir, sub, ses):
+    """Plot the pupil data from this session."""
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import mesofield.data.proc.load as load
+    import mesofield.data.batch as batch
+    import mesofield.data.proc as proc
+    
+    datadict =  load.file_hierarchy(dir)
+
+    print(f"DEBUG: Available subject keys: {list(datadict.keys())}")
+    print(f"DEBUG: Available session keys for subject '{sub}': {list(datadict[sub].keys())}")
+    print(f"DEBUG: Keys within session '{ses}': {list(datadict[sub][ses].keys())}")
+    
+    data = pd.DataFrame(pd.read_pickle(r"D:\jgronemeyer\240324_HFSA\processed\dlc_output\20250408_174515_sub-STREHAB05_ses-10_task-widefield_pupil.omeDLC_Resnet50_DLC-HFSAApr20shuffle2_snapshot_010_full.pickle")).head()
+    proc_data = proc.process_deeplabcut_pupil_data(data)
+    print(proc_data.head())
 
 if __name__ == "__main__":
     cli()

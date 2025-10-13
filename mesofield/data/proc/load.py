@@ -36,7 +36,7 @@ TASK_REGEX = re.compile(r"task-([A-Za-z0-9]+)")
 
 GLOB_PATTERNS: Dict[str, str] = {
     "mesoscope.ome.tiff": "meso_tiff",
-    "mesoscope.ome.tiff_frame_metadata.json": "meso_metadata",
+    "meso.ome.tiff_frame_metadata.json": "meso_metadata",
     "pupil.mp4": "pupil_mp4",
     "pupil.mp4_frame_metadata.json": "pupil_metadata",
     "treadmill.csv": "encoder",
