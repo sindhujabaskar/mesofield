@@ -108,7 +108,7 @@ class ConfigController(QWidget):
     # ------------------------------------------------------------------------------------- #
     def __init__(self, procedure: 'Procedure', display_keys=None):
         super().__init__()
-        self.config: ExperimentConfig = procedure.config #type: ignore
+        self.config: ExperimentConfig = procedure.config 
         self.procedure = procedure
         if display_keys is None and hasattr(self.config, "display_keys"):
             display_keys = self.config.display_keys
@@ -293,7 +293,7 @@ class ConfigController(QWidget):
         Stop the LED pattern by sending a stop sequence to the Arduino-Switch device.
         """
         try:
-            self._mmc1.getPropertyObject('Arduino-Switch', 'State').stopSequence()
+            self.config.hardware.Dhyana.core.getPropertyObject('Arduino-Switch', 'State').stopSequence()
             print("LED test pattern stopped successfully.")
         except Exception as e:
             print(f"Error stopping LED pattern: {e}")
