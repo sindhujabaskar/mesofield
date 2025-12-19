@@ -3,6 +3,7 @@ VALID_BACKENDS = {"micromanager", "opencv"}
 from typing import Dict, Any, List, Optional, Type, TypeVar, Callable
 import yaml
 
+from mesofield.io.devices.lick import SensorSerialWorker
 from mesofield.protocols import HardwareDevice, DataProducer
 from mesofield.io.devices import Nidaq, MMCamera, SerialWorker, EncoderSerialInterface
 from mesofield.utils._logger import get_logger, log_this_fr
@@ -107,6 +108,7 @@ class HardwareManager():
         self.logger.info("Initializing hardware devices from YAML configuration...")
         self._initialize_cameras()
         self._initialize_encoder()
+        self._initialize_sensor()
         self._initialize_daq()
 
     # ------------------------------------------------------------------
@@ -159,6 +161,31 @@ class HardwareManager():
             self.encoder.bids_type = self.encoder.path_args['bids_type']
             self.devices["encoder"] = self.encoder
 
+    def _initialize_sensor(self):
+        """Initialize sensor device from YAML configuration."""
+        if self.yaml.get("sensor"):
+            params = self.yaml.get("sensor")
+            if params.get('type') == 'lick':
+                self.sensor = SensorSerialWorker(
+                    serial_port=params.get('port'),
+                    baud_rate=params.get('baudrate'),
+                    sample_interval=params.get('sample_interval_ms'),
+                    development_mode=params.get('development_mode')
+                )
+            # elif params.get('type') == 'lick':
+            #     self.sensor = EncoderSerialInterface(
+            #         port=params.get('port'),
+            #         baudrate=params.get('baudrate'),
+            #     )
+            output = params.get('output', {})
+            self.sensor.path_args = {
+                'suffix': output.get('suffix', 'sensor'),
+                'extension': output.get('file_type', getattr(self.sensor, 'file_type', 'csv')),
+                'bids_type': output.get('bids_type', getattr(self.sensor, 'bids_type', None))
+            }
+            self.sensor.file_type = self.sensor.path_args['extension']
+            self.sensor.bids_type = self.sensor.path_args['bids_type']
+            self.devices["sensor"] = self.sensor
 
     def _initialize_cameras(self):
         cams = []

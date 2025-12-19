@@ -26,6 +26,19 @@ encoder:
     file_type: "csv"
     bids_type: "beh"
 
+sensor:
+  type: "lick"
+  port: "COM5"
+  baudrate: 115200
+  capacitance_threshold: 100
+
+  sample_interval_ms: 20
+  development_mode: True
+
+  output:
+    suffix: "lick"
+    file_type: "csv"
+    bids_type: "beh"
 
 cameras:
   - id: "Camera"
